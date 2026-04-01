@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+metadata:
+  name: cert-manager
+namespace: cert-manager
+resources:
+  - namespace.yaml
+  - helm-repository-jetstack.yaml
+  - helm-release-cert-manager.yaml
+  - helm-release-additional-manifests.yaml
+configMapGenerator:
+  - name: cert-manager-values-base
+    files:
+      - values.yaml=values.yaml
+  - name: cert-manager-values-additional-manifests
+    files:
+      - values.yaml=values-additional-manifests.yaml
+configurations:
+  - ../../../kustomizeconfig.yaml

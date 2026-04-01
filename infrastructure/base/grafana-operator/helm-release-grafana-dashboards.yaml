@@ -1,0 +1,175 @@
+# This is helm chart which is used to create a Grafana instance using the Grafana operator
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: grafana-dashboards
+  namespace: grafana
+spec:
+  releaseName: grafana-dashboards
+  chart:
+    spec:
+      chart: additional-manifests
+      sourceRef:
+        kind: HelmRepository
+        name: additional-manifests
+        namespace: flux-system
+      version: "0.1.0"
+  dependsOn:
+    - namespace: grafana
+      name: grafana-operator
+  interval: 5m
+  install:
+    remediation:
+      retries: 3
+  # Values for the helm chart
+  values:
+    manifests:
+      # Node exporter dashboard
+      - apiVersion: grafana.integreatly.org/v1beta1
+        kind: GrafanaDashboard
+        metadata:
+          name: node-exporter-full
+        spec:
+          folder: "linux"
+          datasources:
+            - inputName: DS_PROMETHEUS
+              datasourceName: victoria-${cluster_name}
+          instanceSelector:
+            matchLabels:
+              dashboards: "grafana"
+          url: "https://grafana.com/api/dashboards/1860/revisions/40/download"
+      # Ingress controller dashboard
+      - apiVersion: grafana.integreatly.org/v1beta1
+        kind: GrafanaDashboard
+        metadata:
+          name: kubernetes-ingress-controller
+        spec:
+          folder: "kubernetes"
+          datasources:
+            - inputName: DS_PROMETHEUS
+              datasourceName: victoria-${cluster_name}
+          instanceSelector:
+            matchLabels:
+              dashboards: "grafana"
+          url: "https://grafana.com/api/dashboards/12575/revisions/2/download"
+      # Cert manager dashboard
+      - apiVersion: grafana.integreatly.org/v1beta1
+        kind: GrafanaDashboard
+        metadata:
+          name: cert-manager
+        spec:
+          folder: "kubernetes"
+          datasources:
+            - inputName: DS_PROMETHEUS
+              datasourceName: victoria-${cluster_name}
+          instanceSelector:
+            matchLabels:
+              dashboards: "grafana"
+          url: "https://grafana.com/api/dashboards/20340/revisions/1/download"
+      # Karpenter dashboard
+      - apiVersion: grafana.integreatly.org/v1beta1
+        kind: GrafanaDashboard
+        metadata:
+          name: karpenter
+        spec:
+          folder: "kubernetes"
+          datasources:
+            - inputName: DS_PROMETHEUS
+              datasourceName: victoria-${cluster_name}
+          instanceSelector:
+            matchLabels:
+              dashboards: "grafana"
+          url: "https://grafana.com/api/dashboards/18862/revisions/2/download"
+      # Kubernetes dashboards
+      - apiVersion: grafana.integreatly.org/v1beta1
+        kind: GrafanaDashboard
+        metadata:
+          name: k8s-system-api-server
+        spec:
+          folder: "kubernetes"
+          datasources:
+            - inputName: DS_PROMETHEUS
+              datasourceName: victoria-${cluster_name}
+          instanceSelector:
+            matchLabels:
+              dashboards: "grafana"
+          url: "https://raw.githubusercontent.com/dotdc/grafana-dashboards-kubernetes/master/dashboards/k8s-system-api-server.json"
+      - apiVersion: grafana.integreatly.org/v1beta1
+        kind: GrafanaDashboard
+        metadata:
+          name: k8s-system-coredns
+        spec:
+          folder: "kubernetes"
+          datasources:
+            - inputName: DS_PROMETHEUS
+              datasourceName: victoria-${cluster_name}
+          instanceSelector:
+            matchLabels:
+              dashboards: "grafana"
+          url: "https://raw.githubusercontent.com/dotdc/grafana-dashboards-kubernetes/master/dashboards/k8s-system-coredns.json"
+      - apiVersion: grafana.integreatly.org/v1beta1
+        kind: GrafanaDashboard
+        metadata:
+          name: k8s-views-global
+        spec:
+          folder: "kubernetes"
+          datasources:
+            - inputName: DS_PROMETHEUS
+              datasourceName: victoria-${cluster_name}
+          instanceSelector:
+            matchLabels:
+              dashboards: "grafana"
+          url: "https://raw.githubusercontent.com/dotdc/grafana-dashboards-kubernetes/master/dashboards/k8s-views-global.json"
+      - apiVersion: grafana.integreatly.org/v1beta1
+        kind: GrafanaDashboard
+        metadata:
+          name: k8s-views-namespaces
+        spec:
+          folder: "kubernetes"
+          datasources:
+            - inputName: DS_PROMETHEUS
+              datasourceName: victoria-${cluster_name}
+          instanceSelector:
+            matchLabels:
+              dashboards: "grafana"
+          url: "https://raw.githubusercontent.com/dotdc/grafana-dashboards-kubernetes/master/dashboards/k8s-views-namespaces.json"
+      - apiVersion: grafana.integreatly.org/v1beta1
+        kind: GrafanaDashboard
+        metadata:
+          name: k8s-views-nodes
+        spec:
+          folder: "kubernetes"
+          datasources:
+            - inputName: DS_PROMETHEUS
+              datasourceName: victoria-${cluster_name}
+          instanceSelector:
+            matchLabels:
+              dashboards: "grafana"
+          url: "https://raw.githubusercontent.com/dotdc/grafana-dashboards-kubernetes/master/dashboards/k8s-views-nodes.json"
+      - apiVersion: grafana.integreatly.org/v1beta1
+        kind: GrafanaDashboard
+        metadata:
+          name: k8s-views-pods
+        spec:
+          folder: "kubernetes"
+          datasources:
+            - inputName: DS_PROMETHEUS
+              datasourceName: victoria-${cluster_name}
+          instanceSelector:
+            matchLabels:
+              dashboards: "grafana"
+          url: "https://raw.githubusercontent.com/dotdc/grafana-dashboards-kubernetes/master/dashboards/k8s-views-pods.json"
+      # Mikrotik MKTXP Exporter dashboard
+      - apiVersion: grafana.integreatly.org/v1beta1
+        kind: GrafanaDashboard
+        metadata:
+          name: mikrotik-mktxp-exporter
+        spec:
+          folder: "network"
+          datasources:
+            - inputName: DS_PROMETHEUS
+              datasourceName: victoria-${cluster_name}
+          instanceSelector:
+            matchLabels:
+              dashboards: "grafana"
+          url: "https://grafana.com/api/dashboards/13679/revisions/24/download"

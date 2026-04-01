@@ -1,0 +1,195 @@
+stages:
+  - lint
+  - validate
+  - security
+  - integration
+
+variables:
+  FLUX_VERSION: "2.8.1"
+  KUBECONFORM_VERSION: "0.6.7"
+  GITLEAKS_VERSION: "8.24.0"
+  K3D_VERSION: "5.8.3"
+  K3S_IMAGE: "rancher/k3s:v1.35.1-k3s1"
+
+# ---------------------------------------------------------------------------
+# Shared base for validate jobs
+# ---------------------------------------------------------------------------
+
+.validate-base:
+  stage: validate
+  image: alpine:3.21
+  before_script:
+    - apk add --no-cache curl bash gettext
+    - |
+      curl -sL "https://github.com/fluxcd/flux2/releases/download/v${FLUX_VERSION}/flux_${FLUX_VERSION}_linux_amd64.tar.gz" \
+        | tar xz -C /usr/local/bin
+    - |
+      export CLUSTER_NAME="ci-test"
+      export CLUSTER_DOMAIN="example.com"
+      export CLUSTER_PUBLIC_IP="127.0.0.1"
+      export LETSENCRYPT_EMAIL="ci@example.com"
+      export INGRESS_NGINX_ALLOWED_IPS="0.0.0.0/0"
+
+      mkdir -p "clusters/${CLUSTER_NAME}"
+      cp -r clusters/_default-template/* "clusters/${CLUSTER_NAME}/"
+      envsubst '${CLUSTER_NAME} ${CLUSTER_DOMAIN} ${CLUSTER_PUBLIC_IP} ${LETSENCRYPT_EMAIL} ${INGRESS_NGINX_ALLOWED_IPS}' \
+        < "clusters/${CLUSTER_NAME}/cluster-sync.yaml" > "clusters/${CLUSTER_NAME}/cluster-sync.yaml.tmp"
+      mv "clusters/${CLUSTER_NAME}/cluster-sync.yaml.tmp" "clusters/${CLUSTER_NAME}/cluster-sync.yaml"
+
+      cat > /tmp/flux-system-ks.yaml <<EOF
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: flux-system
+        namespace: flux-system
+      spec:
+        interval: 10m
+        sourceRef:
+          kind: GitRepository
+          name: flux-system
+        path: "./clusters/${CLUSTER_NAME}"
+        prune: true
+      EOF
+
+# ---------------------------------------------------------------------------
+# Stage: lint
+# ---------------------------------------------------------------------------
+
+yamllint:
+  stage: lint
+  image: alpine:3.21
+  before_script:
+    - apk add --no-cache python3 py3-pip
+    - pip3 install --break-system-packages yamllint
+  script:
+    - yamllint -c .yamllint.yml .
+  rules:
+    - if: $CI_MERGE_REQUEST_IID
+
+shellcheck:
+  stage: lint
+  image: koalaman/shellcheck-alpine:stable
+  script:
+    - shellcheck -x scripts/*.sh
+  rules:
+    - if: $CI_MERGE_REQUEST_IID
+
+# ---------------------------------------------------------------------------
+# Stage: validate
+# ---------------------------------------------------------------------------
+
+kubeconform:
+  extends: .validate-base
+  needs: []
+  before_script:
+    - !reference [.validate-base, before_script]
+    - |
+      curl -sL "https://github.com/yannh/kubeconform/releases/download/v${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
+        | tar xz -C /usr/local/bin
+  script:
+    - >-
+      flux build kustomization flux-system
+      --kustomization-file /tmp/flux-system-ks.yaml
+      --path "clusters/${CLUSTER_NAME}/"
+      --recursive
+      --dry-run
+      --local-sources "GitRepository/flux-system/flux-system=."
+      | kubeconform
+      -strict
+      -ignore-missing-schemas
+      -summary
+      -schema-location default
+      -schema-location "https://raw.githubusercontent.com/fluxcd-community/flux2-schemas/main/{{.NormalizedKubernetesVersion}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"
+      -schema-location "https://raw.githubusercontent.com/fluxcd-community/flux2-schemas/main/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"
+  rules:
+    - if: $CI_MERGE_REQUEST_IID
+
+# ---------------------------------------------------------------------------
+# Stage: security
+# ---------------------------------------------------------------------------
+
+gitleaks:
+  stage: security
+  image: alpine:3.21
+  before_script:
+    - apk add --no-cache curl
+    - |
+      curl -sL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+        | tar xz -C /usr/local/bin
+  script:
+    - gitleaks detect --source . --no-git --verbose
+  rules:
+    - if: $CI_MERGE_REQUEST_IID
+
+# ---------------------------------------------------------------------------
+# Stage: integration
+# ---------------------------------------------------------------------------
+
+integration-test:
+  stage: integration
+  image: alpine:3.21
+  services:
+    - docker:27-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_CERT_PATH: "/certs/client"
+    DOCKER_TLS_VERIFY: "1"
+  before_script:
+    - apk add --no-cache docker-cli git bash curl gettext openssl sudo
+    - |
+      until docker info >/dev/null 2>&1; do sleep 1; done
+    - |
+      TEST_BRANCH="ci-test-${CI_PIPELINE_ID}"
+      CI_REMOTE="https://oauth2:${GITLAB_PAT}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+      git config --global user.email "ci@example.com"
+      git config --global user.name "GitLab CI"
+      git remote set-url origin "$CI_REMOTE" || git remote add origin "$CI_REMOTE"
+      git checkout -b "$TEST_BRANCH"
+      git push -u origin "$TEST_BRANCH"
+  script:
+    - |
+      export CLUSTER_NAME="ci-test"
+      export CLUSTER_DOMAIN="example.com"
+      export CLUSTER_PUBLIC_IP="127.0.0.1"
+      export LETSENCRYPT_EMAIL="ci@example.com"
+      export INGRESS_NGINX_ALLOWED_IPS="0.0.0.0/0"
+      export CLOUDFLARE_API_TOKEN="dummy-ci-token"
+      export OPENAI_API_KEY="sk-dummy-ci-key"
+      export FLUX_GITLAB_REPO_NAME="${CI_PROJECT_NAME}"
+      export FLUX_GITLAB_REPO_OWNER="${CI_PROJECT_NAMESPACE}"
+      export SOURCE_BRANCH="ci-test-${CI_PIPELINE_ID}"
+      export GITLAB_PAT
+
+      bash scripts/bootstrap.sh
+
+      log() { printf "\n\033[1m\033[36m==> %s\033[0m\n" "$1"; }
+
+      export KUBECONFIG=~/.kube/k3d-"${CLUSTER_NAME}"
+
+      log "Waiting for Flux Kustomizations to reconcile"
+      kubectl -n flux-system wait kustomization/cluster-components \
+        --for=condition=Ready --timeout=5m
+
+      log "Removing HelmReleases that require real credentials"
+      kubectl delete helmrelease external-dns -n external-dns --ignore-not-found
+
+      log "Waiting for all HelmReleases to become Ready"
+      for hr in $(kubectl get helmrelease -A -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metadata.name}{"\n"}{end}'); do
+        NS="${hr%%/*}"
+        NAME="${hr##*/}"
+        echo "  Waiting for ${NS}/${NAME}"
+        kubectl -n "$NS" wait helmrelease/"$NAME" --for=condition=Ready --timeout=10m
+      done
+
+      log "Flux reconciliation status"
+      kubectl get kustomizations -A
+      kubectl get gitrepositories -A
+      kubectl get helmrepositories -A
+      kubectl get helmreleases -A
+  after_script:
+    - |
+      git push "https://oauth2:${GITLAB_PAT}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git" \
+        --delete "ci-test-${CI_PIPELINE_ID}" 2>/dev/null || true
+  rules:
+    - if: $CI_MERGE_REQUEST_IID

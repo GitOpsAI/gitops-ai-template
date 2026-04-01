@@ -1,0 +1,25 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: cert-manager-additional-manifests
+  namespace: cert-manager
+spec:
+  releaseName: cert-manager-additional-manifests
+  chart:
+    spec:
+      chart: additional-manifests
+      sourceRef:
+        kind: HelmRepository
+        name: additional-manifests
+        namespace: flux-system
+      version: "0.1.0"
+  dependsOn:
+    - namespace: cert-manager
+      name: cert-manager
+  interval: 5m
+  install:
+    remediation:
+      retries: 3
+  valuesFrom:
+    - kind: ConfigMap
+      name: cert-manager-values-additional-manifests

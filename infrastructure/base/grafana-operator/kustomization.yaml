@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+metadata:
+  name: grafana
+namespace: grafana
+resources:
+  - namespace.yaml
+  - helm-repo-grafana-operator.yaml
+  - helm-release-grafana-operator.yaml
+  - helm-release-grafana-instance.yaml
+  - helm-release-grafana-datasources.yaml
+  - helm-release-grafana-dashboards.yaml
+configurations:
+  - ../../../kustomizeconfig.yaml

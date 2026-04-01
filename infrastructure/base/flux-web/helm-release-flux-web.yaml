@@ -1,0 +1,36 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: flux-web
+  namespace: flux-system
+spec:
+  interval: 30m
+  releaseName: flux-web
+  serviceAccountName: flux-operator
+  chartRef:
+    kind: OCIRepository
+    name: flux-operator-chart
+  values:
+    fullnameOverride: flux-web
+    installCRDs: false
+    web:
+      serverOnly: true
+      ingress:
+        enabled: true
+        annotations:
+          nginx.ingress.kubernetes.io/whitelist-source-range: "${ingress_nginx_allowed_ips}"
+          external-dns.alpha.kubernetes.io/target: "${cluster_public_ip}"
+          cert-manager.io/cluster-issuer: letsencrypt-${cluster_name}-dns
+          nginx.ingress.kubernetes.io/ssl-redirect: "true"
+          nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+          nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+        className: nginx-external
+        hosts:
+          - host: flux.${cluster_domain}
+            paths:
+              - path: /
+                pathType: Prefix
+        tls:
+          - secretName: flux-${cluster_name}-tls
+            hosts:
+              - flux.${cluster_domain}

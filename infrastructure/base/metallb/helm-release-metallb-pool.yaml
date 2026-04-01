@@ -1,0 +1,39 @@
+# This is helm chart which is used to create a Grafana instance using the Grafana operator
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: metallb-pool
+  namespace: metallb
+spec:
+  releaseName: metallb-pool
+  chart:
+    spec:
+      chart: additional-manifests
+      sourceRef:
+        kind: HelmRepository
+        name: additional-manifests
+        namespace: flux-system
+      version: "0.1.0"
+  dependsOn:
+    - namespace: metallb
+      name: metallb
+  interval: 5m
+  install:
+    remediation:
+      retries: 3
+  # Values for the helm chart
+  values:
+    manifests:
+      - apiVersion: metallb.io/v1beta1
+        kind: IPAddressPool
+        metadata:
+          name: default-pool
+          namespace: metallb
+        spec:
+          addresses:
+            - ${metallb_ip_pool_addresses}
+      - apiVersion: metallb.io/v1beta1
+        kind: L2Advertisement
+        metadata:
+          name: l2
+          namespace: metallb

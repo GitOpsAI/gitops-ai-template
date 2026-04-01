@@ -1,0 +1,18 @@
+instance:
+  distribution:
+    version: "2.x"
+    registry: "ghcr.io/fluxcd"
+  components:
+    - source-controller
+    - kustomize-controller
+    - helm-controller
+    - notification-controller
+  cluster:
+    type: kubernetes
+    networkPolicy: true
+  sync:
+    kind: GitRepository
+    url: "https://gitlab.com/${FLUX_GITLAB_REPO_OWNER}/${FLUX_GITLAB_REPO_NAME}.git"
+    ref: "refs/heads/${FLUX_GITLAB_REPO_BRANCH}"
+    path: "clusters/${CLUSTER_NAME}"
+    pullSecret: "flux-system"

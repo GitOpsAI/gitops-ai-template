@@ -1,0 +1,88 @@
+# This is helm chart which is used to create a Grafana instance using the Grafana operator
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: grafana-instance
+  namespace: grafana
+spec:
+  releaseName: grafana-instance
+  chart:
+    spec:
+      chart: additional-manifests
+      sourceRef:
+        kind: HelmRepository
+        name: additional-manifests
+        namespace: flux-system
+      version: "0.1.0"
+  dependsOn:
+    - namespace: ingress-nginx-external
+      name: ingress-nginx-external
+    - namespace: grafana
+      name: grafana-operator
+  interval: 5m
+  install:
+    remediation:
+      retries: 3
+  # Values for the helm chart
+  values:
+    manifests:
+      # Create a Grafana instance
+      - apiVersion: grafana.integreatly.org/v1beta1
+        kind: Grafana
+        metadata:
+          name: grafana
+          labels:
+            dashboards: "grafana"
+        spec:
+          version: "12.3.0"
+          config:
+            security:
+              admin_user: root
+              admin_password: pleaseletmein2026
+            log:
+              mode: "console"
+            auth:
+              disable_login_form: "false"
+            # Enable Google OAuth
+            auth.google:
+              enabled: "false"
+            auth.basic:
+              enabled: "false"
+          # Modify the Grafana deployment to use the Google OAuth credentials
+          deployment:
+            spec:
+              template:
+                spec:
+                  containers:
+                    - name: grafana
+                      resources:
+                        requests:
+                          cpu: 50m
+                          memory: 128Mi
+                        limits:
+                          cpu: 2
+                          memory: 1024Mi
+          # Create an Ingress resource for the Grafana instance
+          ingress:
+            metadata:
+              annotations:
+                cert-manager.io/cluster-issuer: letsencrypt-${cluster_name}-dns
+                nginx.ingress.kubernetes.io/whitelist-source-range: "${ingress_nginx_allowed_ips}"
+                external-dns.alpha.kubernetes.io/target: "${cluster_public_ip}"
+            spec:
+              ingressClassName: nginx-external
+              rules:
+                - host: grafana.${cluster_domain}
+                  http:
+                    paths:
+                      - backend:
+                          service:
+                            name: grafana-service
+                            port:
+                              number: 3000
+                        path: /
+                        pathType: Prefix
+              tls:
+                - hosts:
+                    - grafana.${cluster_domain}
+                  secretName: grafana-${cluster_name}-tls

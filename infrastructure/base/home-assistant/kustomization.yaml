@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+metadata:
+  name: home-assistant
+namespace: home-assistant
+resources:
+  - namespace.yaml
+  # Install Home Assistant
+  - helm-repository-home-assistant.yaml
+  - helm-release-home-assistant.yaml

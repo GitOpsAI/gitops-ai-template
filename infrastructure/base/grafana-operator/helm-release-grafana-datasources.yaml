@@ -1,0 +1,43 @@
+# This is helm chart which is used to create a Grafana instance using the Grafana operator
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: grafana-datasources
+  namespace: grafana
+spec:
+  releaseName: grafana-datasources
+  chart:
+    spec:
+      chart: additional-manifests
+      sourceRef:
+        kind: HelmRepository
+        name: additional-manifests
+        namespace: flux-system
+      version: "0.1.0"
+  dependsOn:
+    - namespace: grafana
+      name: grafana-operator
+  interval: 5m
+  install:
+    remediation:
+      retries: 3
+  # Values for the helm chart
+  values:
+    manifests:
+      - apiVersion: grafana.integreatly.org/v1beta1
+        kind: GrafanaDatasource
+        metadata:
+          name: victoria-${cluster_name}
+        spec:
+          instanceSelector:
+            matchLabels:
+              dashboards: "grafana"
+          datasource:
+            name: victoria-${cluster_name}
+            type: prometheus
+            access: proxy
+            url: http://vmsingle-supermon-victoria-metrics-k8s-stack.victoria-metrics.svc.cluster.local:8429
+            isDefault: true
+            jsonData:
+              "tlsSkipVerify": true
+              "timeInterval": "30s"

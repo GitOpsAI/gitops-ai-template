@@ -1,0 +1,25 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: victoria-metrics-k8s-stack
+  namespace: victoria-metrics
+spec:
+  releaseName: supermon
+  chart:
+    spec:
+      chart: victoria-metrics-k8s-stack
+      sourceRef:
+        kind: HelmRepository
+        name: victoria-metrics
+        namespace: victoria-metrics
+      version: 0.72.2
+  dependsOn:
+    - namespace: ingress-nginx-external
+      name: ingress-nginx-external
+  interval: 5m
+  install:
+    remediation:
+      retries: 3
+  valuesFrom:
+    - kind: ConfigMap
+      name: victoria-metrics-values-base
