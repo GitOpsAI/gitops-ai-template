@@ -42,7 +42,10 @@ spec:
             log:
               mode: "console"
             auth:
-              disable_login_form: "false"
+              disable_login_form: "true"
+            auth.anonymous:
+              enabled: "true"
+              org_role: "Viewer"
             # Enable Google OAuth
             auth.google:
               enabled: "false"
