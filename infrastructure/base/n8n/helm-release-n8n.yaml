@@ -747,12 +747,11 @@ spec:
     # https://github.com/valkey-io/valkey-helm
     valkey:
       enabled: false
-    # replicaCount: 1
-    #
-    # auth:
-    #   enabled: false
-    #
-    # dataStorage:
-    #   enabled: false
-    #   requestedSize: 2Gi
-
+      # replicaCount: 1
+      #
+      # auth:
+      #   enabled: false
+      #
+      # dataStorage:
+      #   enabled: false
+      #   requestedSize: 2Gi

@@ -1944,4 +1944,3 @@ spec:
 
     # -- Add extra objects dynamically to this chart
     extraObjects: []
-
