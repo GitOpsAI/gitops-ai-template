@@ -17,6 +17,8 @@ spec:
   dependsOn:
     - namespace: grafana
       name: grafana-operator
+    - namespace: grafana
+      name: grafana-instance
   interval: 5m
   install:
     remediation:

@@ -47,7 +47,7 @@ spec:
             auth.google:
               enabled: "false"
             auth.basic:
-              enabled: "false"
+              enabled: "true"
           # Modify the Grafana deployment to use the Google OAuth credentials
           deployment:
             spec:
