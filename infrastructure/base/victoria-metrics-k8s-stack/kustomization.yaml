@@ -7,9 +7,5 @@ resources:
   - namespace.yaml
   - helm-repository-victoria-metrics.yaml
   - helm-release-victoria-metrics-stack.yaml
-configMapGenerator:
-  - name: victoria-metrics-values-base
-    files:
-      - values.yaml=values.yaml
 configurations:
   - ../../../kustomizeconfig.yaml

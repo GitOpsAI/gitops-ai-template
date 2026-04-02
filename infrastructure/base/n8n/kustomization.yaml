@@ -7,9 +7,5 @@ resources:
   - namespace.yaml
   - helm-repository-8gears.yaml
   - helm-release-n8n.yaml
-configMapGenerator:
-  - name: n8n-values-base
-    files:
-      - values.yaml=values.yaml
 configurations:
   - ../../../kustomizeconfig.yaml
