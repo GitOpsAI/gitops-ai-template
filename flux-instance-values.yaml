@@ -12,7 +12,7 @@ instance:
     networkPolicy: true
   sync:
     kind: GitRepository
-    url: "https://gitlab.com/${FLUX_GITLAB_REPO_OWNER}/${FLUX_GITLAB_REPO_NAME}.git"
-    ref: "refs/heads/${FLUX_GITLAB_REPO_BRANCH}"
+    url: "https://gitlab.com/${FLUX_GIT_REPO_OWNER}/${FLUX_GIT_REPO_NAME}.git"
+    ref: "refs/heads/${FLUX_GIT_REPO_BRANCH}"
     path: "clusters/${CLUSTER_NAME}"
     pullSecret: "flux-system"
