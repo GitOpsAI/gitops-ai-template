@@ -1,4 +1,4 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - ../../../../infrastructure/base/victoria-metrics-k8s-stack
+  - ../../../../templates/system/ingress-nginx-external
