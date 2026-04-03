@@ -43,6 +43,9 @@ spec:
               mode: "console"
             auth:
               disable_login_form: "false"
+            auth.anonymous:
+              enabled: "true"
+              org_role: "Editor"
             # Enable Google OAuth
             auth.google:
               enabled: "false"
