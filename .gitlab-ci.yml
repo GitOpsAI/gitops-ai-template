@@ -2,6 +2,7 @@ stages:
   - lint
   - validate
   - security
+  - notify
 
 variables:
   FLUX_VERSION: "2.8.3"
@@ -111,3 +112,67 @@ gitleaks:
     - gitleaks detect --source . --no-git --verbose
   rules:
     - if: $CI_MERGE_REQUEST_IID
+
+# ---------------------------------------------------------------------------
+# metadata + MR risk hints (see docs/template-sync.md)
+# ---------------------------------------------------------------------------
+
+validate_metadata:
+  stage: validate
+  image: alpine:3.23.3@sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659
+  needs: []
+  before_script:
+    - apk add --no-cache python3 py3-pip
+    - pip3 install --break-system-packages pyyaml
+  script:
+    - |
+      python3 - <<'PY'
+      import yaml
+      from pathlib import Path
+      m = yaml.safe_load(Path("metadata.yaml").read_text())
+      assert m.get("schema") == 1, "metadata.yaml: schema must be 1"
+      assert m.get("version"), "metadata.yaml: version is required"
+      assert m.get("upstream", {}).get("path"), "metadata.yaml: upstream.path is required"
+      print("metadata.yaml OK — version", m["version"])
+      PY
+  rules:
+    - if: $CI_PIPELINE_SOURCE
+
+mr_classify_routine_paths:
+  stage: notify
+  image: alpine:3.23.3@sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659
+  script:
+    - |
+      echo "CI classification: ROUTINE_SYNC_CANDIDATE"
+      echo "This MR includes changes under infrastructure/base/. Often safe for chart bumps — still require full validate + review."
+  rules:
+    - if: $CI_MERGE_REQUEST_IID
+      changes:
+        - infrastructure/base/**/*
+
+mr_classify_high_touch:
+  stage: notify
+  image: alpine:3.23.3@sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659
+  script:
+    - |
+      echo "CI classification: HIGH_TOUCH_REVIEW"
+      echo "This MR touches Flux instance config, SOPS config, encrypted secrets, or cluster sync — require explicit human review before merge."
+  rules:
+    - if: $CI_MERGE_REQUEST_IID
+      changes:
+        - flux-instance-values.yaml
+        - .sops.yaml
+        - "**/secret-*.yaml"
+        - clusters/**/cluster-sync.yaml
+
+mr_classify_cluster_overlay:
+  stage: notify
+  image: alpine:3.23.3@sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659
+  script:
+    - |
+      echo "CI classification: CLUSTER_OVERLAY"
+      echo "This MR changes cluster-specific paths — merge infrastructure/base first, then reconcile overlays (see docs/template-sync.md)."
+  rules:
+    - if: $CI_MERGE_REQUEST_IID
+      changes:
+        - clusters/**/*

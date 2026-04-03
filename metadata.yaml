@@ -1,0 +1,8 @@
+# Machine-readable template identity. Bump `version` on each tagged release (semver).
+# Keep in sync with CHANGELOG.md and git tags.
+version: "1.0.0"
+schema: 1
+upstream:
+  provider: gitlab
+  path: everythings-gonna-be-alright/fluxcd_ai_template
+  host: gitlab.com
