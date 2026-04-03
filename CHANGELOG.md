@@ -6,7 +6,7 @@ All notable changes to this GitOps template are documented here. Versions follow
 
 ### Added
 
-- Initial semver baseline and `metadata.yaml` for template identity and upstream sync tooling.
+- Initial semver baseline and `template-sync-metadata.yaml` for template identity and upstream sync tooling.
 - Documentation for [template synchronization](docs/template-sync.md) and [major-version migrations](docs/migrations/README.md).
 
 ### Migration

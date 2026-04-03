@@ -9,7 +9,7 @@
 - [ ] Refreshed `clusters/_default-template/` if needed.
 - [ ] Updated `clusters/<name>/` selectively (no blind overwrite of secrets or local tweaks).
 - [ ] Ran local validation: `flux build` + kubeconform (same as CI).
-- [ ] Updated `TEMPLATE_SYNC.md` / `metadata.yaml` in **this** repo to record upstream ref.
+- [ ] Updated `TEMPLATE_SYNC.md` / `template-sync-metadata.yaml` in **this** repo to record upstream ref.
 
 ### Risk note
 

@@ -23,21 +23,21 @@ Use your organization’s fork path if you mirror the template elsewhere.
 
 Before merging to your default branch, mirror what this repo’s pipeline runs:
 
-| Check | Purpose |
-|-------|---------|
-| `yamllint` | YAML style and basic errors |
+| Check                                  | Purpose                           |
+|----------------------------------------|-----------------------------------|
+| `yamllint`                             | YAML style and basic errors       |
 | `flux build kustomization … --dry-run` | Flux can render your cluster path |
-| `kubeconform` | API shapes and CRDs |
-| `gitleaks` | No plaintext secrets |
+| `kubeconform`                          | API shapes and CRDs               |
+| `gitleaks`                             | No plaintext secrets              |
 
 Replicate the same `CLUSTER_*` substitutions your CI uses (see [.gitlab-ci.yml](../.gitlab-ci.yml) `CLUSTER_NAME`, etc.) when validating locally.
 
 ## Version metadata
 
-- Root [`metadata.yaml`](../metadata.yaml) — current template semver and upstream coordinates.
+- Root [`template-sync-metadata.yaml`](../template-sync-metadata.yaml) — current template semver and upstream coordinates.
 - [`CHANGELOG.md`](../CHANGELOG.md) — release notes and breaking changes.
 
-After merging upstream, update or confirm `metadata.yaml` / `TEMPLATE_SYNC.md` in **your** repo to record the upstream tag you integrated.
+After merging upstream, update or confirm `template-sync-metadata.yaml` / `TEMPLATE_SYNC.md` in **your** repo to record the upstream tag you integrated.
 
 ## Automation
 
