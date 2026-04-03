@@ -87,9 +87,11 @@ kubeconform:
       -strict
       -ignore-missing-schemas
       -summary
+      -verbose
       -schema-location default
       -schema-location "https://raw.githubusercontent.com/fluxcd-community/flux2-schemas/main/{{.NormalizedKubernetesVersion}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"
       -schema-location "https://raw.githubusercontent.com/fluxcd-community/flux2-schemas/main/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"
+      -schema-location "https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"
   rules:
     - if: $CI_MERGE_REQUEST_IID
 
