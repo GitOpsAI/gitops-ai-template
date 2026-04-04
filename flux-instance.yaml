@@ -1,4 +1,9 @@
-instance:
+apiVersion: fluxcd.controlplane.io/v1
+kind: FluxInstance
+metadata:
+  name: flux
+  namespace: flux-system
+spec:
   distribution:
     version: "2.x"
     registry: "ghcr.io/fluxcd"

@@ -3,6 +3,6 @@
 version: "1.0.0"
 schema: 1
 upstream:
-  provider: gitlab
-  path: everythings-gonna-be-alright/fluxcd_ai_template
-  host: gitlab.com
+  provider: github
+  path: GitOpsAI/gitops-ai-template
+  host: github.com
