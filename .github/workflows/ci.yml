@@ -1,0 +1,134 @@
+# ---------------------------------------------------------------------------
+# CI pipeline – mirrors .gitlab-ci.yml
+# Stages: lint → validate → security
+# Runs on every pull_request targeting main.
+# ---------------------------------------------------------------------------
+
+name: CI
+
+on:
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: sh
+
+env:
+  FLUX_VERSION: "2.8.3"
+  KUBECONFORM_VERSION: "0.7.0"
+  GITLEAKS_VERSION: "8.30.1"
+  # Cluster variables used for template rendering during validate
+  CLUSTER_NAME: "ci-test"
+  CLUSTER_DOMAIN: "example.com"
+  CLUSTER_PUBLIC_IP: "127.0.0.1"
+  LETSENCRYPT_EMAIL: "ci@example.com"
+  INGRESS_NGINX_ALLOWED_IPS: "0.0.0.0/0"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Stage: lint
+  # ---------------------------------------------------------------------------
+
+  yamllint:
+    name: Lint – yamllint
+    runs-on: ubuntu-24.04
+    container:
+      image: alpine:3.23.3@sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install yamllint
+        run: apk add --no-cache python3 py3-pip && pip3 install --break-system-packages yamllint
+      - name: Run yamllint
+        run: yamllint -c .yamllint.yml .
+
+  # ---------------------------------------------------------------------------
+  # Stage: validate
+  # ---------------------------------------------------------------------------
+
+  kubeconform:
+    name: Validate – kubeconform
+    runs-on: ubuntu-24.04
+    container:
+      image: alpine:3.23.3@sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools (flux + kubeconform + gettext)
+        run: |
+          apk add --no-cache curl bash gettext
+
+          curl -sL "https://github.com/fluxcd/flux2/releases/download/v${FLUX_VERSION}/flux_${FLUX_VERSION}_linux_amd64.tar.gz" \
+            | tar xz -C /usr/local/bin
+
+          curl -sL "https://github.com/yannh/kubeconform/releases/download/v${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
+            | tar xz -C /usr/local/bin
+
+      - name: Render cluster template
+        run: |
+          mkdir -p "clusters/${CLUSTER_NAME}"
+          cp -r clusters/_default-template/* "clusters/${CLUSTER_NAME}/"
+          envsubst '${CLUSTER_NAME} ${CLUSTER_DOMAIN} ${CLUSTER_PUBLIC_IP} ${LETSENCRYPT_EMAIL} ${INGRESS_NGINX_ALLOWED_IPS}' \
+            < "clusters/${CLUSTER_NAME}/cluster-sync.yaml" > "clusters/${CLUSTER_NAME}/cluster-sync.yaml.tmp"
+          mv "clusters/${CLUSTER_NAME}/cluster-sync.yaml.tmp" "clusters/${CLUSTER_NAME}/cluster-sync.yaml"
+
+      - name: Write flux-system Kustomization stub
+        run: |
+          cat > /tmp/flux-system-ks.yaml <<EOF
+          apiVersion: kustomize.toolkit.fluxcd.io/v1
+          kind: Kustomization
+          metadata:
+            name: flux-system
+            namespace: flux-system
+          spec:
+            interval: 10m
+            sourceRef:
+              kind: GitRepository
+              name: flux-system
+            path: "./clusters/${CLUSTER_NAME}"
+            prune: true
+          EOF
+
+      - name: Run kubeconform
+        run: >-
+          flux build kustomization flux-system
+          --kustomization-file /tmp/flux-system-ks.yaml
+          --path "clusters/${CLUSTER_NAME}/"
+          --recursive
+          --dry-run
+          --local-sources "GitRepository/flux-system/flux-system=."
+          | kubeconform
+          -strict
+          -ignore-missing-schemas
+          -summary
+          -verbose
+          -schema-location default
+          -schema-location "https://raw.githubusercontent.com/fluxcd-community/flux2-schemas/main/{{.NormalizedKubernetesVersion}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"
+          -schema-location "https://raw.githubusercontent.com/fluxcd-community/flux2-schemas/main/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"
+          -schema-location "https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"
+
+  # ---------------------------------------------------------------------------
+  # Stage: security
+  # ---------------------------------------------------------------------------
+
+  gitleaks:
+    name: Security – gitleaks
+    runs-on: ubuntu-24.04
+    container:
+      image: alpine:3.23.3@sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install gitleaks
+        run: |
+          apk add --no-cache curl
+          curl -sL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar xz -C /usr/local/bin
+      - name: Detect secrets
+        run: gitleaks detect --source . --no-git --verbose
