@@ -12,6 +12,9 @@ spec:
         kind: HelmRepository
         name: grafana-operator
       version: 5.22.2
+  dependsOn:
+    - namespace: victoria-metrics
+      name: victoria-metrics-k8s-stack
   interval: 5m
   install:
     remediation:
