@@ -72,7 +72,7 @@ spec:
       - apiVersion: grafana.integreatly.org/v1beta1
         kind: GrafanaDashboard
         metadata:
-          name: Karpenter
+          name: karpenter
         spec:
           folder: "Kubernetes"
           datasources:
