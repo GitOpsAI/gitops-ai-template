@@ -4,11 +4,15 @@ All notable changes to this GitOps template are documented here. Versions follow
 
 ## [1.1.0] — 2026-04-11
 
+### System
+
+- **cert-manager** ([`helm-release-cert-manager.yaml`](templates/system/cert-manager/helm-release-cert-manager.yaml)): Jetstack Helm chart updated from **1.20.1** to **1.20.2**.
+
 ### Monitoring
 
 - **Prometheus Operator CRDs** ([`helm-release-prometheus-operator-crds.yaml`](templates/monitoring/prometheus-operator-crds/helm-release-prometheus-operator-crds.yaml)): chart updated from **13.0.2** to **28.0.1**.
 - **Victoria Metrics k8s stack** ([`helm-release-victoria-metrics-stack.yaml`](templates/monitoring/victoria-metrics-k8s-stack/helm-release-victoria-metrics-stack.yaml)): chart updated from **0.72.2** to **0.72.6** ([upstream changelog for 0.72.6](https://docs.victoriametrics.com/helm/victoria-metrics-k8s-stack/changelog/#id-0726)).
-- **Grafana instance** ([`helm-release-grafana-instance.yaml`](templates/monitoring/grafana-operator/helm-release-grafana-instance.yaml)): Grafana Operator `Grafana` CR `spec.version` updated from **12.3.0** to **12.4.2**
+- **Grafana instance** ([`helm-release-grafana-instance.yaml`](templates/monitoring/grafana-operator/helm-release-grafana-instance.yaml)): Grafana Operator `Grafana` CR `spec.version` updated from **12.3.0** to **12.4.2**.
 
 ## [1.0.0] — 2026-04-03
 
