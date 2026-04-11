@@ -74,7 +74,7 @@ jobs:
       - name: Render cluster template
         run: |
           mkdir -p "clusters/${CLUSTER_NAME}"
-          cp -r clusters/_default-template/* "clusters/${CLUSTER_NAME}/"
+          cp -r clusters/_template/* "clusters/${CLUSTER_NAME}/"
           envsubst '${CLUSTER_NAME} ${CLUSTER_DOMAIN} ${CLUSTER_PUBLIC_IP} ${LETSENCRYPT_EMAIL} ${INGRESS_NGINX_ALLOWED_IPS}' \
             < "clusters/${CLUSTER_NAME}/cluster-sync.yaml" > "clusters/${CLUSTER_NAME}/cluster-sync.yaml.tmp"
           mv "clusters/${CLUSTER_NAME}/cluster-sync.yaml.tmp" "clusters/${CLUSTER_NAME}/cluster-sync.yaml"
@@ -131,29 +131,29 @@ jobs:
         with:
           fetch-depth: 0
 
-      # actions/checkout requires paths under GITHUB_WORKSPACE; nesting a second clone
-      # under the template repo made post-job `git submodule foreach` (credential cleanup)
-      # fail with: No url found for submodule path '_gitops-ai-bootstrapper'. Clone to RUNNER_TEMP instead.
+      # Second actions/checkout into the workspace breaks post-job submodule cleanup; use plain
+      # git clone. Clone under GITHUB_WORKSPACE so setup-node `cache-dependency-path` resolves
+      # (paths under RUNNER_TEMP are outside the repo and npm cache setup fails to resolve them).
       - name: Clone gitops-ai-bootstrapper
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git clone --depth 1 -b feat/improve_template_sync \
             "https://x-access-token:${TOKEN}@github.com/GitOpsAI/gitops-ai-bootstrapper.git" \
-            "${RUNNER_TEMP}/gitops-ai-bootstrapper"
+            "${GITHUB_WORKSPACE}/_gitops-ai-bootstrapper"
 
       - uses: actions/setup-node@v4
         with:
           node-version: "25"
           cache: npm
-          cache-dependency-path: ${{ runner.temp }}/gitops-ai-bootstrapper/package-lock.json
+          cache-dependency-path: _gitops-ai-bootstrapper/package-lock.json
 
       - name: Install bootstrapper dependencies
-        working-directory: ${{ runner.temp }}/gitops-ai-bootstrapper
+        working-directory: _gitops-ai-bootstrapper
         run: npm ci --ignore-scripts
 
       - name: Run template upgrade test (k3d + Flux)
-        working-directory: ${{ runner.temp }}/gitops-ai-bootstrapper
+        working-directory: _gitops-ai-bootstrapper
         env:
           TEMPLATE_UPGRADE_TEST: "true"
           TEMPLATE_UPGRADE_PR_NUMBER: ${{ github.event.pull_request.number }}

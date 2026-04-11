@@ -28,7 +28,7 @@ variables:
         | tar xz -C /usr/local/bin
     - |
       mkdir -p "clusters/${CLUSTER_NAME}"
-      cp -r clusters/_default-template/* "clusters/${CLUSTER_NAME}/"
+      cp -r clusters/_template/* "clusters/${CLUSTER_NAME}/"
       envsubst '${CLUSTER_NAME} ${CLUSTER_DOMAIN} ${CLUSTER_PUBLIC_IP} ${LETSENCRYPT_EMAIL} ${INGRESS_NGINX_ALLOWED_IPS}' \
         < "clusters/${CLUSTER_NAME}/cluster-sync.yaml" > "clusters/${CLUSTER_NAME}/cluster-sync.yaml.tmp"
       mv "clusters/${CLUSTER_NAME}/cluster-sync.yaml.tmp" "clusters/${CLUSTER_NAME}/cluster-sync.yaml"
