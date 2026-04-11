@@ -12,7 +12,7 @@ spec:
         kind: HelmRepository
         name: jetstack
         namespace: cert-manager
-      version: "1.20.2"
+      version: "1.20.1"
   interval: 5m
   install:
     remediation:
@@ -1468,4 +1468,3 @@ spec:
     # the static YAML manifests.
     # +docs:hidden
     creator: "helm"
-
