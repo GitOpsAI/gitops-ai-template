@@ -7,10 +7,5 @@ resources:
   - namespace.yaml
   - helm-repository-headlamp.yaml
   - helm-release-headlamp.yaml
-configMapGenerator:
-  - name: headlamp-values-base
-    namespace: headlamp
-    files:
-      - values.yaml=values.yaml
 configurations:
   - ../../../kustomizeconfig.yaml

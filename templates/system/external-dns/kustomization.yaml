@@ -8,9 +8,5 @@ resources:
   - namespace.yaml
   - helm-repository-external-dns.yaml
   - helm-release-external-dns.yaml
-configMapGenerator:
-  - name: external-dns-values-base
-    files:
-      - values.yaml=values.yaml
 configurations:
   - ../../../kustomizeconfig.yaml
