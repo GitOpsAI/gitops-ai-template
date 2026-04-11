@@ -1,6 +1,6 @@
 # ---------------------------------------------------------------------------
 # CI pipeline – mirrors .gitlab-ci.yml
-# Stages: lint → validate → security
+# Stages: lint → validate → integration (template upgrade) → security
 # Runs on every pull_request targeting main.
 # ---------------------------------------------------------------------------
 
@@ -113,6 +113,65 @@ jobs:
           -schema-location "https://raw.githubusercontent.com/fluxcd-community/flux2-schemas/main/{{.NormalizedKubernetesVersion}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"
           -schema-location "https://raw.githubusercontent.com/fluxcd-community/flux2-schemas/main/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"
           -schema-location "https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"
+
+  # ---------------------------------------------------------------------------
+  # Stage: integration (live cluster — gitops-ai-bootstrapper template upgrade test)
+  # Bootstraps from main, waits for Flux/Helm, merges this PR, pushes, verifies upgrade.
+  # ---------------------------------------------------------------------------
+
+  template-upgrade-test:
+    name: Integration · Template upgrade (main → PR)
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout template (full history for main + PR merge)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout gitops-ai-bootstrapper
+        uses: actions/checkout@v4
+        with:
+          repository: GitOpsAI/gitops-ai-bootstrapper
+          path: _gitops-ai-bootstrapper
+          ref: feat/improve_template_sync
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "25"
+          cache: npm
+          cache-dependency-path: _gitops-ai-bootstrapper/package-lock.json
+
+      - name: Install bootstrapper dependencies
+        working-directory: _gitops-ai-bootstrapper
+        run: npm ci --ignore-scripts
+
+      - name: Run template upgrade test (k3d + Flux)
+        working-directory: _gitops-ai-bootstrapper
+        env:
+          TEMPLATE_UPGRADE_TEST: "true"
+          TEMPLATE_UPGRADE_PR_NUMBER: ${{ github.event.pull_request.number }}
+          GITHUB_WORKSPACE: ${{ github.workspace }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_ACTIONS: "true"
+          CI_PIPELINE_ID: ${{ github.run_id }}
+          GIT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Optional: PAT with repo scope if Flux cannot clone a fork PR with GITHUB_TOKEN.
+          FLUX_GIT_TOKEN: ${{ secrets.FLUX_GIT_TOKEN }}
+        run: npm run test:template-upgrade
+
+      - name: Delete remote template-upgrade branch
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git push \
+            "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" \
+            --delete "ci-template-upgrade-${{ github.run_id }}" 2>/dev/null || true
 
   # ---------------------------------------------------------------------------
   # Stage: security
