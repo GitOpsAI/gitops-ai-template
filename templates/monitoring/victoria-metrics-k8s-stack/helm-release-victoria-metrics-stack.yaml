@@ -12,7 +12,7 @@ spec:
         kind: HelmRepository
         name: victoria-metrics
         namespace: victoria-metrics
-      version: 0.72.6
+      version: 0.77.0
   dependsOn:
     - namespace: ingress-nginx-external
       name: ingress-nginx-external
@@ -75,24 +75,25 @@ spec:
         capabilities:
           drop:
             - ALL
-
       crds:
         plain: true
         cleanup:
           enabled: true
           image:
-            repository: rancher/kubectl
+            repository: registry.k8s.io/kubectl
             pullPolicy: IfNotPresent
         upgrade:
           enabled: true
           forceConflicts: true
       serviceMonitor:
         enabled: true
+      admissionWebhooks:
+          # -- Default the validating webhook `failurePolicy` to `Ignore` so the stack can be installed/upgraded in a single pass without races against the operator's webhook server. Override to `Fail` for strict validation once the operator is in steady state.
+          policy: Ignore
       operator:
         # -- By default, operator converts prometheus-operator objects.
         disable_prometheus_converter: false
         enable_converter_ownership: true
-
     defaultDashboards:
       # -- Enable custom dashboards installation
       enabled: false
@@ -156,14 +157,12 @@ spec:
 
       # -- Per rule properties
       rules: {}
-      # yamllint disable rule:comments-indentation
       # CPUThrottlingHigh:
       #   create: true
       #   spec:
       #     for: 15m
       #     labels:
       #       severity: critical
-      # yamllint enable rule:comments-indentation
       # -- Rule group properties
       groups:
         etcd:
@@ -351,6 +350,7 @@ spec:
       labels: {}
       # -- VMSingle annotations
       annotations: {}
+      # -- Create VMSingle CR
       enabled: true
       # -- Full spec for VMSingle CRD. Allowed values describe [here](https://docs.victoriametrics.com/operator/api/#vmsinglespec)
       spec:
@@ -400,7 +400,6 @@ spec:
         pathType: Prefix
         # -- Ingress controller class name
         ingressClassName: nginx-external
-
         # -- Array of host objects
         hosts:
           - victoria.${cluster_domain}
@@ -441,6 +440,45 @@ spec:
           - path:
               type: PathPrefix
               value: '{{ dig "spec" "extraArgs" "http.pathPrefix" "/" .Values.vmsingle }}'
+
+    vmdistributed:
+    # -- Create VMDistributed CR
+    enabled: false
+    # -- VMDistributed labels
+    labels: {}
+    # -- VMDistributed annotations
+    annotations: {}
+    # -- Full spec for VMDistributed CRD. Allowed values described [here](https://docs.victoriametrics.com/operator/api/#vmdistributedspec)
+    spec:
+        vmauth:
+        spec:
+            port: "8427"
+        zoneCommon:
+        vmcluster:
+            spec:
+            vmstorage:
+                replicaCount: 2
+                storageDataPath: /vm-data
+                storage:
+                volumeClaimTemplate:
+                    spec:
+                    resources:
+                        requests:
+                        storage: 10Gi
+            vmselect:
+                replicaCount: 2
+                cacheMountPath: /select-cache
+                storage:
+                volumeClaimTemplate:
+                    spec:
+                    resources:
+                        requests:
+                        storage: 2Gi
+            vminsert:
+                replicaCount: 2
+        zones:
+        - name: us-east-1   
+
     vmcluster:
       # -- Create VMCluster CR
       enabled: false
@@ -450,6 +488,7 @@ spec:
       annotations: {}
       # -- Full spec for VMCluster CRD. Allowed values described [here](https://docs.victoriametrics.com/operator/api/#vmclusterspec)
       spec:
+        # -- Data retention period. Possible units character: h(ours), d(ays), w(eeks), y(ears), if no unit character specified - month. The minimum retention period is 24h. See these [docs](https://docs.victoriametrics.com/victoriametrics/single-server-victoriametrics/#retention)
         retentionPeriod: "30d"
         replicationFactor: 2
         vmstorage:
@@ -703,7 +742,8 @@ spec:
         port: "9093"
         selectAllByDefault: true
         image:
-          tag: v0.28.1
+          # renovate: image=prom/alertmanager
+          tag: v0.32.1
         externalURL: https://am.${cluster_domain}
         routePrefix: /
         securityContext:
@@ -756,66 +796,119 @@ spec:
 
 
       config:
-        templates:
-          - "/etc/vm/configs/**/*.tmpl"
-        inhibit_rules: []
+        route:
+        receiver: "blackhole"
+        #   group_by: ["alertgroup", "job"]
+        #   group_wait: 30s
+        #   group_interval: 5m
+        #   repeat_interval: 12h
+        #   routes:
+        #
+        #     # Duplicate code_owner routes to teams
+        #     # These will send alerts to team channels but continue
+        #     # processing through the rest of the tree to handled by on-call
+        #     - matchers:
+        #         - code_owner_channel!=""
+        #         - severity=~"info|warning|critical"
+        #       group_by: ["code_owner_channel", "alertgroup", "job"]
+        #       receiver: slack-code-owners
+        #
+        #     # Standard on-call routes
+        #     - matchers:
+        #         - severity=~"info|warning|critical"
+        #       receiver: slack-monitoring
+        #       continue: true
+        #
+        # inhibit_rules:
+        #   - target_matchers:
+        #       - severity=~"warning|info"
+        #     source_matchers:
+        #       - severity=critical
+        #     equal:
+        #       - cluster
+        #       - namespace
+        #       - alertname
+        #   - target_matchers:
+        #       - severity=info
+        #     source_matchers:
+        #       - severity=warning
+        #     equal:
+        #       - cluster
+        #       - namespace
+        #       - alertname
+        #   - target_matchers:
+        #       - severity=info
+        #     source_matchers:
+        #       - alertname=InfoInhibitor
+        #     equal:
+        #       - cluster
+        #       - namespace
 
-      # better alert templates for slack
-      # source https://gist.github.com/milesbxf/e2744fc90e9c41b47aa47925f8ff6512
+        receivers:
+        - name: blackhole
+        # - name: "slack-monitoring"
+        #   slack_configs:
+        #     - channel: "#channel"
+        #       send_resolved: true
+        #       title: '{{ template "slack.monzo.title" . }}'
+        #       icon_emoji: '{{ template "slack.monzo.icon_emoji" . }}'
+        #       color: '{{ template "slack.monzo.color" . }}'
+        #       text: '{{ template "slack.monzo.text" . }}'
+        #       actions:
+        #         - type: button
+        #           text: "Runbook :green_book:"
+        #           url: "{{ (index .Alerts 0).Annotations.runbook_url }}"
+        #         - type: button
+        #           text: "Query :mag:"
+        #           url: "{{ (index .Alerts 0).GeneratorURL }}"
+        #         - type: button
+        #           text: "Dashboard :grafana:"
+        #           url: "{{ (index .Alerts 0).Annotations.dashboard }}"
+        #         - type: button
+        #           text: "Silence :no_bell:"
+        #           url: '{{ template "__alert_silence_link" . }}'
+        #         - type: button
+        #           text: '{{ template "slack.monzo.link_button_text" . }}'
+        #           url: "{{ .CommonAnnotations.link_url }}"
+        # - name: slack-code-owners
+        #   slack_configs:
+        #     - channel: "#{{ .CommonLabels.code_owner_channel }}"
+        #       send_resolved: true
+        #       title: '{{ template "slack.monzo.title" . }}'
+        #       icon_emoji: '{{ template "slack.monzo.icon_emoji" . }}'
+        #       color: '{{ template "slack.monzo.color" . }}'
+        #       text: '{{ template "slack.monzo.text" . }}'
+        #       actions:
+        #         - type: button
+        #           text: "Runbook :green_book:"
+        #           url: "{{ (index .Alerts 0).Annotations.runbook }}"
+        #         - type: button
+        #           text: "Query :mag:"
+        #           url: "{{ (index .Alerts 0).GeneratorURL }}"
+        #         - type: button
+        #           text: "Dashboard :grafana:"
+        #           url: "{{ (index .Alerts 0).Annotations.dashboard }}"
+        #         - type: button
+        #           text: "Silence :no_bell:"
+        #           url: '{{ template "__alert_silence_link" . }}'
+        #         - type: button
+        #           text: '{{ template "slack.monzo.link_button_text" . }}'
+        #           url: "{{ .CommonAnnotations.link_url }}"
+        #
+      # -- Better alert templates for [slack source](https://gist.github.com/milesbxf/e2744fc90e9c41b47aa47925f8ff6512)
       monzoTemplate:
-        enabled: false
+        enabled: true
 
-      # extra alert templates
+      # -- (object) Extra alert templates
       templateFiles:
-        notifications.tmpl: |-
-          {{/* Color of Slack attachment (appears as line next to alert )*/}}
-          {{ define "slack.color" -}}
-              {{ if eq .Status "firing" -}}
-                  {{ if eq .CommonLabels.severity "critical" -}}
-                      #940000
-                  {{- else if eq .CommonLabels.severity "high" -}}
-                      danger
-                  {{- else if eq .CommonLabels.severity "warning" -}}
-                      warning
-                  {{- else if eq .CommonLabels.severity "info" -}}
-                      #439FE0
-                  {{- else -}}
-                      #BCBCBC
-                  {{- end -}}
-              {{ else -}}
-              good
-              {{- end }}
-          {{- end }}
+        {}
+        # template_1.tmpl: |-
+        #   {{ define "hello" -}}
+        #   hello, Victoria!
+        #   {{- end }}
+        # template_2.tmpl: ""
 
-          {{ define "__alert_silence_link" -}}
-            {{ .ExternalURL }}/#/silences/new?filter=%7B
-            {{- range .CommonLabels.SortedPairs -}}
-                {{- if ne .Name "alertname" -}}
-                    {{- .Name }}%3D"{{- .Value -}}"%2C%20
-                {{- end -}}
-            {{- end -}}
-            alertname%3D"{{- .CommonLabels.alertname -}}"%7D
-          {{- end }}
-
-          {{ define "__single_message_title" }}{{ range .Alerts.Firing }}{{ .Labels.alertname }}{{ end }}{{ range .Alerts.Resolved }}{{ .Labels.alertname }}{{ end }}{{ end }}
-
-          {{ define "custom_title" }}[{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ if or (and (eq (len .Alerts.Firing) 1) (eq (len .Alerts.Resolved) 0)) (and (eq (len .Alerts.Firing) 0) (eq (len .Alerts.Resolved) 1)) }}{{ template "__single_message_title" . }}{{ end }}{{ end }}
-
-          {{ define "custom_slack_message" }}
-          {{ if or (and (eq (len .Alerts.Firing) 1) (eq (len .Alerts.Resolved) 0)) (and (eq (len .Alerts.Firing) 0) (eq (len .Alerts.Resolved) 1)) }}
-          {{ range .Alerts.Firing }}{{ .Annotations.message }}{{ .Annotations.description }}{{ end }}{{ range .Alerts.Resolved }}{{ .Annotations.message }}{{ .Annotations.description }}{{ end }}
-          {{ else }}
-          {{ if gt (len .Alerts.Firing) 0 }}
-          *Alerts Firing:*
-          {{ range .Alerts.Firing }}- *{{ .Labels.alertname }}* {{ .Annotations.message }}{{ .Annotations.description }}
-          {{ end }}{{ end }}
-          {{ if gt (len .Alerts.Resolved) 0 }}
-          *Alerts Resolved:*
-          {{ range .Alerts.Resolved }}- *{{ .Labels.alertname }}* {{ .Annotations.message }}{{ .Annotations.description }}
-          {{ end }}{{ end }}
-          {{ end }}
-          {{ end }}
-
+      # -- (object) VMAlertmanager ingress configuration
       ingress:
         enabled: false
         # For Kubernetes >= 1.18 you should specify the ingress-controller via the field ingressClassName
@@ -879,9 +972,10 @@ spec:
       enabled: true
 
       # -- Controls whether VMAlert should use VMAgent or VMInsert as a target for remotewrite
-      remoteWriteVMAgent: true
+      remoteWriteVMAgent: false
       # -- (object) Full spec for VMAlert CRD. Allowed values described [here](https://docs.victoriametrics.com/operator/api/#vmalertspec)
       spec:
+        port: "8080"
         selectAllByDefault: true
         evaluationInterval: 20s
         extraArgs:
@@ -1035,12 +1129,16 @@ spec:
       # -- Remote write configuration of VMAgent, allowed parameters defined in a [spec](https://docs.victoriametrics.com/operator/api/#vmagentremotewritespec)
       additionalRemoteWrites:
         []
-        # - url: http://some-remote-write/api/v1/write
+        #- url: http://some-remote-write/api/v1/write
       # -- (object) Full spec for VMAgent CRD. Allowed values described [here](https://docs.victoriametrics.com/operator/api/#vmagentspec)
       spec:
         port: "8429"
         selectAllByDefault: true
         scrapeInterval: 20s
+        externalLabels: {}
+        # For multi-cluster setups it is useful to use "cluster" label to identify the metrics source.
+        # For example:
+        # cluster: cluster-name
         extraArgs:
           promscrape.streamParse: "true"
           # Do not store original labels in vmagent's memory by default. This reduces the amount of memory used by vmagent
@@ -1160,7 +1258,6 @@ spec:
       # -- Configure additional grafana datasources (passed through tpl).
       # Check [here](http://docs.grafana.org/administration/provisioning/#datasources) for details
       extra: []
-      # yamllint disable rule:comments-indentation
       # - name: prometheus-sample
       #   access: proxy
       #   basicAuth: true
@@ -1173,7 +1270,6 @@ spec:
       #   type: prometheus
       #   url: https://{{ printf "%s-prometheus.svc" .Release.Name }}:9090
       #   version: 1
-      # yamllint enable rule:comments-indentation
 
     # -- Grafana dependency chart configuration. For possible values refer [here](https://github.com/grafana/helm-charts/tree/main/charts/grafana#configuration)
     grafana:
@@ -1257,8 +1353,6 @@ spec:
 
       # all values for prometheus-node-exporter helm chart can be specified here
       service:
-        # Add the 'node-exporter' label to be used by serviceMonitor to match standard common usage in rules and grafana dashboards
-        #
         labels:
           jobLabel: node-exporter
       extraArgs:
@@ -1676,12 +1770,6 @@ spec:
             - action: drop
               source_labels: [__name__]
               regex: (rest_client_request_duration_seconds_bucket|rest_client_request_duration_seconds_sum|rest_client_request_duration_seconds_count)
-            # Drop high-cardinality cAdvisor metrics with poor signal/noise ratio
-            # container_tasks_state: rarely used in alerts/dashboards
-            # container_memory_failures_total: pgfault counts rarely actioned
-            - action: drop
-              source_labels: [__name__]
-              regex: "container_tasks_state|container_memory_failures_total"
           relabelConfigs:
             - action: labelmap
               regex: __meta_kubernetes_node_label_(.+)
@@ -1708,7 +1796,6 @@ spec:
               tlsConfig:
                 caFile: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
                 serverName: kubernetes
-                insecureSkipVerify: true
           jobLabel: component
           namespaceSelector:
             matchNames:
@@ -1721,7 +1808,7 @@ spec:
     # Component scraping the kube controller manager
     kubeControllerManager:
       # -- Enable kube controller manager metrics scraping
-      enabled: false
+      enabled: true
 
       # -- If your kube controller manager is not deployed as a pod, specify IPs it can be found on
       endpoints: []
@@ -1746,7 +1833,9 @@ spec:
       # -- Spec for VMServiceScrape CRD is [here](https://docs.victoriametrics.com/operator/api/#vmservicescrapespec)
       vmScrape:
         spec:
-          jobLabel: jobLabel
+          jobLabel: app.kubernetes.io/component
+          namespaceSelector:
+              matchNames: []
           endpoints:
             - bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
               # bearerTokenSecret:
@@ -1780,7 +1869,7 @@ spec:
       # -- Spec for VMServiceScrape CRD is [here](https://docs.victoriametrics.com/operator/api/#vmservicescrapespec)
       vmScrape:
         spec:
-          jobLabel: jobLabel
+          jobLabel: app.kubernetes.io/component
           namespaceSelector:
             matchNames: []
           endpoints:
@@ -1809,7 +1898,7 @@ spec:
       # -- Spec for VMServiceScrape CRD is [here](https://docs.victoriametrics.com/operator/api/#vmservicescrapespec)
       vmScrape:
         spec:
-          jobLabel: jobLabel
+          jobLabel: app.kubernetes.io/component
           namespaceSelector:
             matchNames: []
           endpoints:
@@ -1819,7 +1908,7 @@ spec:
     # Component scraping etcd
     kubeEtcd:
       # -- Enabled KubeETCD metrics scraping
-      enabled: false
+      enabled: true
 
       # -- If your etcd is not deployed as a pod, specify IPs it can be found on
       endpoints: []
@@ -1844,7 +1933,7 @@ spec:
       # -- Spec for VMServiceScrape CRD is [here](https://docs.victoriametrics.com/operator/api/#vmservicescrapespec)
       vmScrape:
         spec:
-          jobLabel: jobLabel
+          jobLabel: app.kubernetes.io/component
           namespaceSelector:
             matchNames: []
           endpoints:
@@ -1853,21 +1942,13 @@ spec:
               #   key: ""
               port: http-metrics
               scheme: https
-              tlsConfig:
-                # kubectl create secret generic etcd-ca --from-file=server.crt --from-file=server.key -n victoria-metrics
-                cert:
-                  secret:
-                    name: "etcd-ca"
-                    key: "server.crt"
-                keySecret:
-                  name: "etcd-ca"
-                  key: "server.key"
-                insecureSkipVerify: true
+                tlsConfig:
+                    caFile: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
 
     # Component scraping kube scheduler
     kubeScheduler:
       # -- Enable KubeScheduler metrics scraping
-      enabled: false
+      enabled: true
 
       # -- If your kube scheduler is not deployed as a pod, specify IPs it can be found on
       endpoints: []
@@ -1892,7 +1973,7 @@ spec:
       # -- Spec for VMServiceScrape CRD is [here](https://docs.victoriametrics.com/operator/api/#vmservicescrapespec)
       vmScrape:
         spec:
-          jobLabel: jobLabel
+          jobLabel: app.kubernetes.io/component
           namespaceSelector:
             matchNames: []
           endpoints:
@@ -1903,7 +1984,6 @@ spec:
               scheme: https
               tlsConfig:
                 caFile: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-                insecureSkipVerify: true
 
     # Component scraping kube proxy
     kubeProxy:
@@ -1932,7 +2012,7 @@ spec:
       # -- Spec for VMServiceScrape CRD is [here](https://docs.victoriametrics.com/operator/api/#vmservicescrapespec)
       vmScrape:
         spec:
-          jobLabel: jobLabel
+          jobLabel: app.kubernetes.io/component
           namespaceSelector:
             matchNames: []
           endpoints:

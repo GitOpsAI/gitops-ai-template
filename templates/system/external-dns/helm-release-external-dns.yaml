@@ -12,6 +12,7 @@ spec:
         kind: HelmRepository
         name: external-dns
         namespace: external-dns
+      version: "1.21.1"
   interval: 5m
   values:
     serviceMonitor:

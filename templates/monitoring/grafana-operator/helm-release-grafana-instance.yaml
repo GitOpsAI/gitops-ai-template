@@ -34,7 +34,7 @@ spec:
           labels:
             dashboards: "grafana"
         spec:
-          version: "12.4.2"
+          version: "13.0.1"
           config:
             security:
               admin_user: root
