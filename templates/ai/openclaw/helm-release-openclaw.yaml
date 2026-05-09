@@ -31,18 +31,18 @@ spec:
     app-template:
       # @schema type:string;required:true
       # -- OpenClaw image version (used by all OpenClaw containers)
-        openclawVersion: "2026.5.7"
+      openclawVersion: "2026.5.7"
       # @schema type:string
       # -- Chromium sidecar image version
-        chromiumVersion: "148.0.7778.97"
+      chromiumVersion: "148.0.7778.97"
       # @schema type:string;enum:[merge, overwrite];default:merge
       # -- Config mode: `merge` preserves runtime changes, `overwrite` for strict GitOps
       configMode: merge
-        # @schema type:array
-        # -- ClawHub skills to install on startup. Set to [] to skip skill installation.
-        skills:
-            - weather
-            - gog
+      # @schema type:array
+      # -- ClawHub skills to install on startup. Set to [] to skip skill installation.
+      skills:
+        - weather
+        - gog
 
       defaultPodOptions:
         # -- Pod security context
@@ -97,10 +97,10 @@ spec:
               # -- Init-skills startup script
               command:
                 - sh
-                    - /scripts/init-skills.sh
-                env:
-                    # @schema type:string
-                    SKILLS_TO_INSTALL: '{{ .Values.skills | join " " }}'
+                - /scripts/init-skills.sh
+              env:
+                # @schema type:string
+                SKILLS_TO_INSTALL: '{{ .Values.skills | join " " }}'
                 HOME: /tmp
                 NPM_CONFIG_CACHE: /tmp/.npm
               securityContext:
@@ -316,10 +316,10 @@ spec:
                     failureThreshold: 12
 
       configMaps:
-            scripts:
-            enabled: true
-            data:
-                init-config.sh: |
+        scripts:
+          enabled: true
+          data:
+            init-config.sh: |
                 log() { echo "[$(date -Iseconds)] [init-config] $*"; }
 
                 log "Starting config initialization"
@@ -615,19 +615,19 @@ spec:
                     port: http
 
       persistence:
-            # Init scripts ConfigMap mounted into both init containers
-            scripts:
-            enabled: true
-            type: configMap
-            identifier: scripts
-            advancedMounts:
-                main:
-                init-config:
-                    - path: /scripts
-                    readOnly: true
-                init-skills:
-                    - path: /scripts
-                    readOnly: true
+        # Init scripts ConfigMap mounted into both init containers
+        scripts:
+          enabled: true
+          type: configMap
+          identifier: scripts
+          advancedMounts:
+            main:
+              init-config:
+                - path: /scripts
+                  readOnly: true
+              init-skills:
+                - path: /scripts
+                  readOnly: true
 
         # ConfigMap for init container to copy from
         config:
@@ -692,19 +692,6 @@ spec:
                 - path: /tmp
               chromium:
                 - path: /tmp
-
-            # CA bundle for internal TLS (optional)
-            # Use with trust-manager or similar to trust internal CAs
-        # ca-bundle:
-        #   enabled: true
-        #   type: configMap
-        #   name: ca-bundle
-        #   advancedMounts:
-        #     main:
-        #       main:
-        #         - path: /etc/ssl/certs/ca-bundle.crt
-        #           subPath: ca-bundle.crt
-        #           readOnly: true
 
       # ============================================================================
       # Network Policies

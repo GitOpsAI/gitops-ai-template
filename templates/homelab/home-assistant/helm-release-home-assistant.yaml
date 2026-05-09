@@ -171,9 +171,6 @@ spec:
         - secretName: home-assistant-${cluster_name}-tls
           hosts:
             - home-assistant.${cluster_domain}
-        # - secretName: chart-example-tls
-        #   hosts:
-        #     - chart-example.local
 
     # Additional ingresses for exposing Home Assistant on different paths/hosts
     # Useful for IoT devices that don't support TLS or need specific path routing
@@ -382,19 +379,13 @@ spec:
         hostPath:
           path: /run/dbus
           type: Directory
+
       # USB device for Zigbee/Z-Wave/Bluetooth dongles
       - name: usb-device
         hostPath:
           path: /dev/ttyUSB0
           type: CharDevice
-      # - name: custom-components
-      #   emptyDir: {}
 
-      # - hostPath:
-      #     path: >-
-      #       /dev/serial/by-id/usb-Silicon_Labs_Sonoff_Zigbee_3.0_USB_Dongle_Plus_0001-if00-port0
-      #     type: CharDevice
-      #   name: usb
     # if you need any additional volume mounts, you can define them here
     additionalMounts:
       - name: dbus

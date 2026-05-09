@@ -229,18 +229,18 @@ spec:
       loadBalancerSourceRanges: []
       # -- Kubernetes Service Nodeport
       nodePort: null
-        # -- Additional ports to expose on the Service in addition to the default
-        # http port. Each entry must have a unique `name` and a `port`. `targetPort`
-        # defaults to `port` when omitted. `nodePort` is only honored when
-        # `service.type` is `NodePort` or `LoadBalancer`. A matching containerPort
-        # must be provided by the user (e.g. via a sidecar) for traffic to actually
-        # be routed.
-        extraServicePorts: []
-        # - name: extra
-        #   port: 9090
-        #   targetPort: extra
-        #   protocol: TCP
-        #   nodePort: null
+      # -- Additional ports to expose on the Service in addition to the default
+      # http port. Each entry must have a unique `name` and a `port`. `targetPort`
+      # defaults to `port` when omitted. `nodePort` is only honored when
+      # `service.type` is `NodePort` or `LoadBalancer`. A matching containerPort
+      # must be provided by the user (e.g. via a sidecar) for traffic to actually
+      # be routed.
+      extraServicePorts: []
+      # - name: extra
+      #   port: 9090
+      #   targetPort: extra
+      #   protocol: TCP
+      #   nodePort: null
 
     # -- Headlamp containers volume mounts
     volumeMounts: []
