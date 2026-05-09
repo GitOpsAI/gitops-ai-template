@@ -50,6 +50,8 @@ spec:
       enabled: true
       admissionWebhooks:
         enabled: false
+        # -- Default the validating webhook `failurePolicy` to `Ignore` so the stack can be installed/upgraded in a single pass without races against the operator's webhook server. Override to `Fail` for strict validation once the operator is in steady state.
+        policy: Ignore
       # -- Tells helm to clean up vm cr resources when uninstalling
       cleanupCRD: true
       cleanupImage:
@@ -87,9 +89,6 @@ spec:
           forceConflicts: true
       serviceMonitor:
         enabled: true
-      admissionWebhooks:
-          # -- Default the validating webhook `failurePolicy` to `Ignore` so the stack can be installed/upgraded in a single pass without races against the operator's webhook server. Override to `Fail` for strict validation once the operator is in steady state.
-          policy: Ignore
       operator:
         # -- By default, operator converts prometheus-operator objects.
         disable_prometheus_converter: false
@@ -442,42 +441,42 @@ spec:
               value: '{{ dig "spec" "extraArgs" "http.pathPrefix" "/" .Values.vmsingle }}'
 
     vmdistributed:
-    # -- Create VMDistributed CR
-    enabled: false
-    # -- VMDistributed labels
-    labels: {}
-    # -- VMDistributed annotations
-    annotations: {}
-    # -- Full spec for VMDistributed CRD. Allowed values described [here](https://docs.victoriametrics.com/operator/api/#vmdistributedspec)
-    spec:
+      # -- Create VMDistributed CR
+      enabled: false
+      # -- VMDistributed labels
+      labels: {}
+      # -- VMDistributed annotations
+      annotations: {}
+      # -- Full spec for VMDistributed CRD. Allowed values described [here](https://docs.victoriametrics.com/operator/api/#vmdistributedspec)
+      spec:
         vmauth:
-        spec:
+          spec:
             port: "8427"
         zoneCommon:
         vmcluster:
-            spec:
+          spec:
             vmstorage:
-                replicaCount: 2
-                storageDataPath: /vm-data
-                storage:
+              replicaCount: 2
+              storageDataPath: /vm-data
+              storage:
                 volumeClaimTemplate:
-                    spec:
-                    resources:
-                        requests:
-                        storage: 10Gi
+                  spec:
+                  resources:
+                    requests:
+                      storage: 10Gi
             vmselect:
-                replicaCount: 2
-                cacheMountPath: /select-cache
-                storage:
+              replicaCount: 2
+              cacheMountPath: /select-cache
+              storage:
                 volumeClaimTemplate:
-                    spec:
-                    resources:
-                        requests:
-                        storage: 2Gi
+                  spec:
+                  resources:
+                    requests:
+                      storage: 2Gi
             vminsert:
-                replicaCount: 2
+              replicaCount: 2
         zones:
-        - name: us-east-1   
+          - name: us-east-1
 
     vmcluster:
       # -- Create VMCluster CR
@@ -845,7 +844,7 @@ spec:
         #       - namespace
 
         receivers:
-        - name: blackhole
+          - name: blackhole
         # - name: "slack-monitoring"
         #   slack_configs:
         #     - channel: "#channel"
@@ -1129,7 +1128,7 @@ spec:
       # -- Remote write configuration of VMAgent, allowed parameters defined in a [spec](https://docs.victoriametrics.com/operator/api/#vmagentremotewritespec)
       additionalRemoteWrites:
         []
-        #- url: http://some-remote-write/api/v1/write
+        # - url: http://some-remote-write/api/v1/write
       # -- (object) Full spec for VMAgent CRD. Allowed values described [here](https://docs.victoriametrics.com/operator/api/#vmagentspec)
       spec:
         port: "8429"
@@ -1835,7 +1834,7 @@ spec:
         spec:
           jobLabel: app.kubernetes.io/component
           namespaceSelector:
-              matchNames: []
+            matchNames: []
           endpoints:
             - bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
               # bearerTokenSecret:
@@ -1942,8 +1941,8 @@ spec:
               #   key: ""
               port: http-metrics
               scheme: https
-                tlsConfig:
-                    caFile: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+              tlsConfig:
+                caFile: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
 
     # Component scraping kube scheduler
     kubeScheduler:
