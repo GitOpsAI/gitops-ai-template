@@ -8,7 +8,7 @@ spec:
   chart:
     spec:
       chart: openclaw
-      version: "1.5.35"
+      version: "1.5.36"
       sourceRef:
         kind: HelmRepository
         name: openclaw
@@ -31,7 +31,7 @@ spec:
     app-template:
       # @schema type:string;required:true
       # -- OpenClaw image version (used by all OpenClaw containers)
-      openclawVersion: "2026.5.7"
+      openclawVersion: "2026.5.12"
       # @schema type:string
       # -- Chromium sidecar image version
       chromiumVersion: "148.0.7778.97"
@@ -73,7 +73,7 @@ spec:
               # -- Init-config startup script
               command:
                 - sh
-                    - /scripts/init-config.sh
+                - /scripts/init-config.sh
               env:
                 CONFIG_MODE: "{{ .Values.configMode | default \"merge\" }}"
               securityContext:
@@ -555,7 +555,7 @@ spec:
                       "enabled": true
                     }
                   }
-                },
+                }
 
                 // Channel configuration can be added here:
                 // "channels": {
@@ -692,6 +692,19 @@ spec:
                 - path: /tmp
               chromium:
                 - path: /tmp
+
+          # CA bundle for internal TLS (optional)
+          # Use with trust-manager or similar to trust internal CAs
+          # ca-bundle:
+          #   enabled: true
+          #   type: configMap
+          #   name: ca-bundle
+          #   advancedMounts:
+          #     main:
+          #       main:
+          #         - path: /etc/ssl/certs/ca-bundle.crt
+          #           subPath: ca-bundle.crt
+          #           readOnly: true
 
       # ============================================================================
       # Network Policies
