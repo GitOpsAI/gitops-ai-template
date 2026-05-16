@@ -8,7 +8,7 @@ spec:
   chart:
     spec:
       chart: home-assistant
-      version: "0.3.49"
+      version: "0.3.57"
       sourceRef:
         kind: HelmRepository
         name: home-assistant
@@ -21,6 +21,10 @@ spec:
     # Default values for home-assistant.
     # This is a YAML-formatted file.
     # Declare variables to be passed into your templates.
+
+    # -- Override the namespace
+    # @default -- `.Release.Namespace`
+    namespaceOverride: ""
 
     # Number of replicas for the deployment
     replicaCount: 1
@@ -51,11 +55,14 @@ spec:
       # If not set and create is true, a name is generated using the fullname template
       name: ""
 
+    # Labels to add to all resources
+    commonLabels: {}
+    # app.kubernetes.io/part-of: home-automation
+
     # Annotations to add to the pod
     podAnnotations: {}
 
     # Pod security context settings
-    # Note: Home Assistant uses s6-overlay which requires root for initialization
     podSecurityContext:
       runAsUser: 0
       runAsGroup: 0
@@ -66,7 +73,7 @@ spec:
     # fsGroupChangePolicy: "OnRootMismatch"
 
     # Environment variables
-    # env:
+    env: []
     # - name: TZ
     #   value: Europe/Prague
     # - name: SOME_VAR_FROM_CONFIG_MAP
@@ -96,6 +103,9 @@ spec:
     #
     # Required for use auto-discovery feature of Home Assistant
     hostNetwork: true
+
+    # Set pod self-perceived hostname (leave empty for default behavior).
+    hostname: ""
 
     # Set the dnsPolicy (you'll want ClusterFirstWithHostNet if running on hostNetwork to reac
     # other k8s services via DNS
@@ -161,11 +171,6 @@ spec:
         - secretName: home-assistant-${cluster_name}-tls
           hosts:
             - home-assistant.${cluster_domain}
-        # yamllint disable rule:comments-indentation
-        # - secretName: chart-example-tls
-        #   hosts:
-        #     - chart-example.local
-        # yamllint enable rule:comments-indentation
 
     # Additional ingresses for exposing Home Assistant on different paths/hosts
     # Useful for IoT devices that don't support TLS or need specific path routing
@@ -246,6 +251,10 @@ spec:
       templateConfig: |-
         # Loads default set of integrations. Do not remove.
         default_config:
+
+        {{- if .Values.serviceMonitor.enabled }}
+        prometheus:
+        {{- end }}
 
         {{- if or .Values.ingress.enabled .Values.ingress.external }}
         http:
@@ -350,7 +359,7 @@ spec:
       # Size of the persistent volume claim
       size: 5Gi
       # Storage class for the persistent volume claim
-      storageClass: "longhorn-v1"
+      storageClass: ""
       # Name of the existing volume for the StatefulSet, this option can be used to bind to an existing PV
       existingVolume: ""
       # Name of the existing PVC to use with Deployment, this option can be used to use an existing PVC
@@ -370,21 +379,13 @@ spec:
         hostPath:
           path: /run/dbus
           type: Directory
+
       # USB device for Zigbee/Z-Wave/Bluetooth dongles
       - name: usb-device
         hostPath:
           path: /dev/ttyUSB0
           type: CharDevice
-      # yamllint disable rule:comments-indentation
-      # - name: custom-components
-      #   emptyDir: {}
 
-      # - hostPath:
-      #     path: >-
-      #       /dev/serial/by-id/usb-Silicon_Labs_Sonoff_Zigbee_3.0_USB_Dongle_Plus_0001-if00-port0
-      #     type: CharDevice
-      #   name: usb
-      # yamllint enable rule:comments-indentation
     # if you need any additional volume mounts, you can define them here
     additionalMounts:
       - name: dbus
@@ -399,7 +400,6 @@ spec:
 
       # - mountPath: /dev/ttyACM0
       #   name: usb
-      # yamllint enable rule:comments-indentation
 
     # if you need to expose additional ports
     additionalPorts: []
@@ -422,7 +422,7 @@ spec:
         path: /
         port: http
         scheme: HTTP
-      periodSeconds: 60
+      periodSeconds: 20
       successThreshold: 1
       timeoutSeconds: 2
     readinessProbe:
@@ -431,7 +431,7 @@ spec:
         path: /
         port: http
         scheme: HTTP
-      periodSeconds: 60
+      periodSeconds: 10
       successThreshold: 1
       timeoutSeconds: 1
     startupProbe: {}
@@ -446,7 +446,8 @@ spec:
     #   port: http
 
     serviceMonitor:
-      # requires HA integration:  https://www.home-assistant.io/integrations/prometheus/
+      # Enabling this automatically enables the Prometheus integration with default configuration.
+      # See https://www.home-assistant.io/integrations/prometheus/ for details.
       enabled: true
       scrapeInterval: 30s
       labels: {}
@@ -472,7 +473,7 @@ spec:
           # Image pull policy for the code-server image
           pullPolicy: IfNotPresent
           # Tag for the code-server image
-          tag: "4.107.0"
+          tag: "4.111.0"
         # Authentication settings for the code-server addon
         auth:
           # Enable or disable authentication (if disabled, --auth none is used)
@@ -515,9 +516,18 @@ spec:
     controller:
       # Type of controller to use: StatefulSet or Deployment
       type: StatefulSet
+      # Labels to add to the controller
+      labels: {}
 
     # Annotations to add to the stateful set
     statefulSetAnnotations: {}
+
+    # Pod replacement policy for the StatefulSet (requires Kubernetes 1.32+)
+    # When set to "Always", a replacement pod is created immediately when a pod is terminating
+    # (e.g., due to a node failure), rather than waiting for the terminating pod to fully shut down.
+    # Valid values: "" (default Kubernetes behavior), "Always"
+    # https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#pod-replacement-policy
+    podReplacementPolicy: ""
 
     # Annotations to add to the deployment
     deploymentAnnotations: {}
