@@ -1,0 +1,186 @@
+# Shared public Gateway (replaces ingress-nginx-external). Wrapped in a HelmRelease so it is
+# applied only after the enwoy-gateway release has installed the Gateway API / Envoy Gateway CRDs.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: enwoy-gateway-config
+spec:
+  releaseName: enwoy-gateway-config
+  chart:
+    spec:
+      chart: additional-manifests
+      sourceRef:
+        kind: HelmRepository
+        name: additional-manifests
+        namespace: flux-system
+      version: "0.1.0"
+  interval: 5m
+  # Gateway readiness depends on the LoadBalancer and the TLS Secret issued by cert-manager;
+  # neither should block the release. Check `kubectl get gateway -A` for listener status.
+  install:
+    disableWait: true
+    remediation:
+      retries: 3
+  upgrade:
+    disableWait: true
+    remediation:
+      retries: 3
+  dependsOn:
+    - namespace: envoy-gateway-system
+      name: enwoy-gateway
+  # Flux substitutes the comma-separated CIDR list inside this string, which a flow sequence then
+  # parses into a list (a plain `${var}` value would stay a single string).
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              group: gateway.envoyproxy.io
+              version: v1alpha1
+              kind: SecurityPolicy
+              name: ip-allowlist
+            patch: |
+              - op: replace
+                path: /spec/authorization/rules/0/principal/clientCIDRs
+                value: [${ingress_nginx_allowed_ips}]
+  values:
+    manifests:
+      # externalTrafficPolicy: Local preserves the client source IP for the IP allowlist
+      # and per-client rate limits.
+      - apiVersion: gateway.envoyproxy.io/v1alpha1
+        kind: EnvoyProxy
+        metadata:
+          name: public
+          namespace: envoy-gateway-system
+        spec:
+          provider:
+            type: Kubernetes
+            kubernetes:
+              envoyService:
+                type: LoadBalancer
+                externalTrafficPolicy: Local
+
+      - apiVersion: gateway.networking.k8s.io/v1
+        kind: GatewayClass
+        metadata:
+          name: envoy
+        spec:
+          controllerName: gateway.envoyproxy.io/gatewayclass-controller
+          parametersRef:
+            group: gateway.envoyproxy.io
+            kind: EnvoyProxy
+            name: public
+            namespace: envoy-gateway-system
+
+      - apiVersion: gateway.networking.k8s.io/v1
+        kind: Gateway
+        metadata:
+          name: public
+          namespace: envoy-gateway-system
+          annotations:
+            # external-dns (gateway-httproute source) publishes every attached HTTPRoute hostname here
+            external-dns.alpha.kubernetes.io/target: "${cluster_public_ip}"
+        spec:
+          gatewayClassName: envoy
+          listeners:
+            - name: http
+              protocol: HTTP
+              port: 80
+              hostname: "*.${cluster_domain}"
+              allowedRoutes:
+                namespaces:
+                  from: Same
+            - name: https
+              protocol: HTTPS
+              port: 443
+              hostname: "*.${cluster_domain}"
+              tls:
+                mode: Terminate
+                certificateRefs:
+                  # Issued by cert-manager (templates/system/cert-manager); provide it manually otherwise
+                  - kind: Secret
+                    name: wildcard-${cluster_name}-tls
+              allowedRoutes:
+                # Only namespaces of components that publish a route. Add new ones here.
+                namespaces:
+                  from: Selector
+                  selector:
+                    matchExpressions:
+                      - key: kubernetes.io/metadata.name
+                        operator: In
+                        values:
+                          - flux-system
+                          - grafana
+                          - victoria-metrics
+                          - openclaw-instance
+
+      - apiVersion: gateway.networking.k8s.io/v1
+        kind: HTTPRoute
+        metadata:
+          name: https-redirect
+          namespace: envoy-gateway-system
+        spec:
+          parentRefs:
+            - name: public
+              sectionName: http
+          rules:
+            - filters:
+                - type: RequestRedirect
+                  requestRedirect:
+                    scheme: https
+                    statusCode: 301
+
+      - apiVersion: gateway.envoyproxy.io/v1alpha1
+        kind: ClientTrafficPolicy
+        metadata:
+          name: public-https
+          namespace: envoy-gateway-system
+        spec:
+          targetRefs:
+            - group: gateway.networking.k8s.io
+              kind: Gateway
+              name: public
+              sectionName: https
+          tls:
+            minVersion: "1.2"
+          headers:
+            lateResponseHeaders:
+              set:
+                - name: Strict-Transport-Security
+                  value: "max-age=31536000; includeSubDomains"
+
+      # Same scope as the former nginx whitelist-source-range (INGRESS_NGINX_ALLOWED_IPS).
+      # clientCIDRs is replaced by the postRenderer above; the placeholder denies everything.
+      - apiVersion: gateway.envoyproxy.io/v1alpha1
+        kind: SecurityPolicy
+        metadata:
+          name: ip-allowlist
+          namespace: envoy-gateway-system
+        spec:
+          targetRefs:
+            - group: gateway.networking.k8s.io
+              kind: Gateway
+              name: public
+          authorization:
+            defaultAction: Deny
+            rules:
+              - name: allowed-cidrs
+                action: Allow
+                principal:
+                  clientCIDRs:
+                    - 255.255.255.255/32
+
+      # Envoy's 15s default route timeout is too short for Grafana queries and the Flux UI
+      # (ingress-nginx used 300s for flux-web). Route-level policies override this.
+      - apiVersion: gateway.envoyproxy.io/v1alpha1
+        kind: BackendTrafficPolicy
+        metadata:
+          name: public
+          namespace: envoy-gateway-system
+        spec:
+          targetRefs:
+            - group: gateway.networking.k8s.io
+              kind: Gateway
+              name: public
+          timeout:
+            http:
+              requestTimeout: 300s

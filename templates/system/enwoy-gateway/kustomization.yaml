@@ -7,3 +7,4 @@ resources:
   - namespace.yaml
   - oci-repository-enwoy-gateway.yaml
   - helm-release-enwoy-gateway.yaml
+  - helm-release-enwoy-gateway-config.yaml

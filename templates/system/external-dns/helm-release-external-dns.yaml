@@ -14,7 +14,15 @@ spec:
         namespace: external-dns
       version: "1.21.1"
   interval: 5m
+  # The gateway-httproute source needs the Gateway API CRDs installed by Envoy Gateway
+  dependsOn:
+    - namespace: envoy-gateway-system
+      name: enwoy-gateway
   values:
+    sources:
+      - service
+      - ingress
+      - gateway-httproute
     serviceMonitor:
       enabled: true
     resources:

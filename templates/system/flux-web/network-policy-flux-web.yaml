@@ -1,0 +1,26 @@
+# FluxInstance `networkPolicy: true` limits flux-system ingress to same-namespace pods;
+# this admits only the public Gateway's Envoy proxies to the web UI port.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: flux-web
+  namespace: flux-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: flux-operator
+      app.kubernetes.io/instance: flux-web
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: envoy-gateway-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: proxy
+              gateway.envoyproxy.io/owning-gateway-name: public
+      ports:
+        - protocol: TCP
+          port: 9080

@@ -52,6 +52,9 @@ spec:
               repository: docker.io/library/nginx
               tag: "1.30-alpine"
               digest: sha256:47928bf67eb62a1863cb08d9ecb52d3e704304ba614eaee17884204677702951
+            # The operator derives Control UI origins from Ingress hosts only, not HTTPRoute hostnames
+            controlUiOrigins:
+              - https://openclaw.${cluster_domain}
 
           # init-uv bootstrap container
           runtimeDeps:
@@ -161,32 +164,19 @@ spec:
             networkPolicy:
               enabled: false
 
+          # HTTPS redirect, HSTS, TLS and the IP allowlist are handled by the shared Gateway
+          # (templates/system/enwoy-gateway); rate limit and timeouts by the policy below.
           networking:
             ingress:
+              enabled: false
+            httpRoute:
               enabled: true
-              className: nginx-external
-              annotations:
-                cert-manager.io/cluster-issuer: letsencrypt-${cluster_name}-dns
-                nginx.ingress.kubernetes.io/whitelist-source-range: "${ingress_nginx_allowed_ips}"
-                external-dns.alpha.kubernetes.io/target: "${cluster_public_ip}"
-              hosts:
-                - host: openclaw.${cluster_domain}
-                  paths:
-                    - path: /
-                      pathType: Prefix
-              tls:
-                - secretName: openclaw-tls
-                  hosts:
-                    - openclaw.${cluster_domain}
-              security:
-                forceHTTPS: true
-                # The operator implements HSTS via a configuration-snippet, which ingress-nginx
-                # rejects (allowSnippetAnnotations: false); the controller already sends HSTS.
-                enableHSTS: false
-                # Per client IP (nginx limit-rps, burst 5x)
-                rateLimiting:
-                  enabled: true
-                  requestsPerSecond: 20
+              parentRefs:
+                - name: public
+                  namespace: envoy-gateway-system
+                  sectionName: https
+              hostnames:
+                - openclaw.${cluster_domain}
 
           observability:
             metrics:
@@ -201,3 +191,31 @@ spec:
               # CrashLooping/OOMKilled/PVCNearlyFull alerts; converted to VMRule by the VictoriaMetrics operator
               prometheusRule:
                 enabled: true
+
+      # Targets the HTTPRoute the operator names after the instance. Overrides the Gateway-wide
+      # BackendTrafficPolicy, so it carries its own timeout.
+      - apiVersion: gateway.envoyproxy.io/v1alpha1
+        kind: BackendTrafficPolicy
+        metadata:
+          name: openclaw-instance
+        spec:
+          targetRefs:
+            - group: gateway.networking.k8s.io
+              kind: HTTPRoute
+              name: openclaw-instance
+          # Control UI uses a long-lived WebSocket; idle streams are still reclaimed by
+          # Envoy's stream idle timeout.
+          timeout:
+            http:
+              requestTimeout: 0s
+          rateLimit:
+            type: Local
+            local:
+              rules:
+                - clientSelectors:
+                    - sourceCIDR:
+                        type: Distinct
+                        value: 0.0.0.0/0
+                  limit:
+                    requests: 20
+                    unit: Second

@@ -6,3 +6,4 @@ namespace: flux-system
 resources:
   - oci-repository.yaml
   - helm-release-flux-web.yaml
+  - network-policy-flux-web.yaml

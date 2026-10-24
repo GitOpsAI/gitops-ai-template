@@ -17,9 +17,13 @@ spec:
     - namespace: cert-manager
       name: cert-manager
   interval: 5m
+  # Issuance depends on ACME and Cloudflare; a pending certificate must not fail the release.
   install:
+    disableWait: true
     remediation:
       retries: 3
+  upgrade:
+    disableWait: true
   values:
     manifests:
       # issuer-lets-encrypt-staging.yaml
@@ -54,3 +58,20 @@ spec:
                     apiTokenSecretRef:
                       name: cloudflare-api-token
                       key: api-token
+      # TLS for the shared Gateway (templates/system/enwoy-gateway) covering every app subdomain
+      - apiVersion: cert-manager.io/v1
+        kind: Certificate
+        metadata:
+          name: wildcard-${cluster_name}
+          namespace: envoy-gateway-system
+        spec:
+          secretName: wildcard-${cluster_name}-tls
+          issuerRef:
+            kind: ClusterIssuer
+            name: letsencrypt-${cluster_name}-dns
+          dnsNames:
+            - "*.${cluster_domain}"
+          privateKey:
+            algorithm: ECDSA
+            size: 256
+            rotationPolicy: Always
