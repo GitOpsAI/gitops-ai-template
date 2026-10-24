@@ -4,14 +4,9 @@ metadata:
   name: enwoy-gateway
 spec:
   releaseName: enwoy-gateway
-  chart:
-    spec:
-      chart: gateway
-      sourceRef:
-        kind: HelmRepository
-        name: enwoy-gateway
-        namespace: flux-system
-      version: "v1.9.2"
+  chartRef:
+    kind: OCIRepository
+    name: enwoy-gateway
   interval: 5m
   # Gateway API and Envoy Gateway CRDs ship in the chart's crds/ dir, which Helm skips on upgrade
   install:
