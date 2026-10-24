@@ -21,8 +21,8 @@ spec:
   dependsOn:
     - name: cert-manager
       namespace: cert-manager
-    - name: ingress-nginx-external
-      namespace: ingress-nginx-external
+    - name: enwoy-gateway
+      namespace: envoy-gateway-system
   values:
     # README
     # High level values structure, overview and explanation of the values.yaml file.

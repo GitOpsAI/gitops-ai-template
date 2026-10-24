@@ -14,8 +14,8 @@ spec:
         namespace: victoria-metrics
       version: 0.77.0
   dependsOn:
-    - namespace: ingress-nginx-external
-      name: ingress-nginx-external
+    - namespace: envoy-gateway-system
+      name: enwoy-gateway
   interval: 5m
   install:
     remediation:

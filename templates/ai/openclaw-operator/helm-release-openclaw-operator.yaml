@@ -1,0 +1,167 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: openclaw-operator
+spec:
+  releaseName: openclaw-operator
+  chartRef:
+    kind: OCIRepository
+    name: openclaw-operator
+  interval: 30m
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    # OpenClaw Operator Helm Values
+
+    # Number of replicas for the operator
+    replicaCount: 1
+
+    # Operator image configuration
+    image:
+      repository: ghcr.io/paperclipinc/openclaw-operator
+      pullPolicy: IfNotPresent
+      tag: ""  # Defaults to chart appVersion
+
+    imagePullSecrets: []
+    nameOverride: ""
+    fullnameOverride: ""
+
+    # ServiceAccount configuration
+    serviceAccount:
+      create: true
+      automount: true
+      annotations: {}
+      name: ""
+
+    # RBAC configuration
+    rbac:
+      # Whether the chart should render the operator's RBAC (ClusterRole/Role
+      # and bindings). Set to false to disable and supply your own out-of-band.
+      create: true
+      # Whether to install aggregated ClusterRoles that extend the built-in
+      # Kubernetes admin/edit/view ClusterRoles with permissions for the
+      # OpenClaw CRDs. With this enabled, users bound to the standard
+      # `admin`/`edit`/`view` ClusterRole in a namespace can manage
+      # OpenClawInstance and OpenClawSelfConfig resources in that namespace.
+      # Disable if your cluster manages CRD access via a separate policy.
+      aggregateToDefaultRoles: true
+
+    # Restrict the operator to a fixed list of namespaces. When empty (default),
+    # the operator watches OpenClawInstance resources cluster-wide and the chart
+    # renders cluster-scoped RBAC. When set to one or more namespaces, the
+    # operator watches only those namespaces and the chart renders a namespaced
+    # Role/RoleBinding pair in each one (instead of a ClusterRole/ClusterRoleBinding).
+    # Each listed namespace must already exist (the chart does not create them).
+    watchNamespaces:
+      - openclaw-instance
+
+    # Pod annotations
+    podAnnotations: {}
+
+    # Pod labels
+    podLabels: {}
+
+    # Pod security context
+    podSecurityContext:
+      runAsNonRoot: true
+      seccompProfile:
+        type: RuntimeDefault
+
+    # Container security context
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+      readOnlyRootFilesystem: true
+      runAsNonRoot: true
+      runAsUser: 65532
+
+    # Resource limits and requests
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+
+    # Liveness probe configuration
+    livenessProbe:
+      httpGet:
+        path: /healthz
+        port: 8081
+      initialDelaySeconds: 15
+      periodSeconds: 20
+
+    # Readiness probe configuration
+    readinessProbe:
+      httpGet:
+        path: /readyz
+        port: 8081
+      initialDelaySeconds: 5
+      periodSeconds: 10
+
+    # Node selector for pod scheduling
+    nodeSelector: {}
+
+    # Tolerations for pod scheduling
+    tolerations: []
+
+    # Affinity rules for pod scheduling
+    affinity: {}
+
+    # Log level for the operator (passed as --zap-log-level). Valid values: debug, info, error, or an integer (0=info, 1=debug).
+    logLevel: info
+
+    # Leader election configuration
+    leaderElection:
+      enabled: true
+      resourceName: openclaw-operator-leader-election
+
+    # Metrics configuration
+    metrics:
+      enabled: true
+      bindAddress: ":8443"
+      secure: true
+      # Service for operator metrics endpoint
+      service:
+        port: 8443
+        annotations: {}
+      # ServiceMonitor for Prometheus Operator scraping
+      serviceMonitor:
+        enabled: false
+        interval: ""
+        scrapeTimeout: ""
+        labels: {}
+
+    # OTLP metrics export configuration (operator-level metrics).
+    # Bridges all Prometheus metrics to an OTLP-compatible backend via gRPC.
+    # Both Prometheus scraping and OTLP push can be active simultaneously.
+    otlp:
+      enabled: false
+      endpoint: ""  # e.g. "otel-collector.observability.svc:4317"
+      insecure: true
+
+    # Webhook configuration (optional)
+    webhook:
+      enabled: false
+      port: 9443
+      certManager:
+        enabled: true
+        issuerRef:
+          name: ""
+          kind: ""
+
+    # Network policy for the operator
+    networkPolicy:
+      enabled: true
+
+    # CRD installation
+    crds:
+      install: true
+      keep: true  # Keep CRDs when uninstalling the chart

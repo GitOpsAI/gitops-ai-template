@@ -1,0 +1,10 @@
+# The operator serves no webhooks in this setup, so nothing needs to reach it.
+# Egress stays open: it needs the Kubernetes API, GitHub (skill packs) and OCI registries.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress

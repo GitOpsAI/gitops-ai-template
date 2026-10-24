@@ -2,6 +2,39 @@
 
 All notable changes to this GitOps template are documented here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### AI
+
+- **OpenClaw**: migrated from the community Helm chart (`serhanekicii/openclaw-helm` **1.5.36**) to the [OpenClaw operator](https://github.com/paperclipinc/openclaw-operator) **0.40.0**.
+  - New package [`templates/ai/openclaw-operator`](templates/ai/openclaw-operator): operator `HelmRelease` from a cosign-verified `OCIRepository` (`oci://ghcr.io/paperclipinc/charts/openclaw-operator`), namespace `openclaw-operator-system` (Pod Security `restricted`), RBAC scoped to the `openclaw-instance` namespace via `watchNamespaces`, default-deny ingress `NetworkPolicy`.
+  - `templates/ai/openclaw` renamed to [`templates/ai/openclaw-instance`](templates/ai/openclaw-instance): `OpenClawInstance` `openclaw-instance` wrapped in [`helm-release-openclaw-instance.yaml`](templates/ai/openclaw-instance/helm-release-openclaw-instance.yaml) (`additional-manifests`, `dependsOn` the operator so CRDs exist first). Removed `helm-release-openclaw.yaml` and `helm-repository-openclaw.yaml`.
+  - OpenClaw image bumped **2026.5.12 → 2026.10.7**. Operator 0.40.0 leaves the PVC root owned by root; 2026.9.x crash-loops on that (`EPERM ... fchmod`), while 2026.10.x logs a warning and keeps the existing mode, so no root init container is needed. Do not pin 2026.9.x.
+  - Model ID updated to `openai/gpt-5.6-sol` and the retired `agents.entries.<id>.default` marker removed. 2026.10 treats both as legacy keys, and `doctor` would otherwise rewrite them on every start (merge mode re-applies the CR config).
+  - Config moved to `spec.config.raw` (`mergeMode: merge`) and updated to the current schema: `agents.list` → `agents.entries`, `logging.consoleStyle: compact` → `json`; dropped `logging.redactSensitive`, hard-coded `/home/node` paths, `trustedProxies`, `controlUi.allowedOrigins` and `browser` profiles (the operator injects these).
+  - Gateway token still comes from `openclaw-envs` / `OPENCLAW_GATEWAY_TOKEN` (no secret format change). The rendered ConfigMap only contains the `${OPENCLAW_GATEWAY_TOKEN}` reference.
+  - Operator-managed `NetworkPolicy` is disabled in favour of [`network-policy-openclaw.yaml`](templates/ai/openclaw-instance/network-policy-openclaw.yaml): ingress only from `ingress-nginx-external` / `envoy-gateway-system` on the gateway proxy port, metrics from `victoria-metrics`; egress limited to kube-dns and public TCP 80/443 (RFC1918, link-local and CGNAT blocked).
+  - Namespace renamed `openclaw` → `openclaw-instance`; it enforces Pod Security `baseline` (audit/warn `restricted`).
+  - Metrics enabled (OTel collector sidecar + `ServiceMonitor`) plus the operator `PrometheusRule` (crash-loop, OOM, PVC > 80 % alerts; converted to `VMRule`). The instance now `dependsOn` `prometheus-operator-crds`.
+  - All pod images are digest-pinned: OpenClaw, Chromium, OTel collector, `init-uv`, and the gateway proxy, which moves from the end-of-life operator default `nginx:1.27-alpine` to `nginx:1.30-alpine`.
+  - `config.forcePaths: [gateway]`: the gateway section (auth mode, bind, trusted proxies, allowed origins) is rebuilt from Git on every restart, so changes made through the Control UI cannot persist there; other runtime changes are still merged.
+  - Disk-aware readiness (`probes.diskReadiness`, `minFree: 256Mi`): a full or read-only PVC marks the pod NotReady instead of serving failing requests.
+  - Ingress rate limiting: 20 requests/s per client IP.
+
+### System
+
+- **Envoy Gateway** ([`helm-release-enwoy-gateway.yaml`](templates/system/enwoy-gateway/helm-release-enwoy-gateway.yaml)): chart and controller **v1.8.0 → v1.9.2**. The chart version was previously set to `1.0.0`, which does not exist in the registry.
+  - Envoy proxy pinned to **`distroless-v1.39.5`** (controller default is `distroless-v1.39.1`); rate limit image moved to the v1.9.2 default **`0482748e`**. All three images are pinned by tag and digest.
+  - `install.crds` / `upgrade.crds: CreateReplace`: the Gateway API and Envoy Gateway CRDs live in the chart's `crds/` directory, which Helm skips on upgrade, so Flux now updates them too.
+  - Fixed yamllint errors (sequence indentation, missing newline at end of file).
+
+### Migration
+
+- The old Helm release is uninstalled when Flux prunes it, and its PVC `openclaw/openclaw-data` is **deleted with it**. To keep agent state (sessions, memory, Codex OAuth tokens, workspace), back up `/home/node/.openclaw` before syncing this version. Then restore it into the new pod: `kubectl cp` into `openclaw-instance/openclaw-instance-0`, container `openclaw`, path `/home/openclaw/.openclaw`.
+- Namespace changed `openclaw` → `openclaw-instance`. In existing cluster repos, update `metadata.namespace` of the SOPS-encrypted `clusters/<name>/components/openclaw/secret-openclaw-envs.yaml` (`sops edit`); Flux prunes the old `openclaw` namespace.
+- Workload names changed: `openclaw/deployment/openclaw` (container `main`) → `openclaw-instance/statefulset/openclaw-instance` (container `openclaw`). Update any scripts that exec into the pod, for example `kubectl exec -n openclaw-instance openclaw-instance-0 -c openclaw -- openclaw devices list`.
+- Devices must be paired again after migration.
+
 ## [1.1.1] — 2026-05-10
 
 ### AI

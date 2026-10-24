@@ -44,6 +44,8 @@ Reference [`kustomizeconfig.yaml`](kustomizeconfig.yaml) from template kustomiza
 
 **Sources**: Prefer `HelmRepository` for Helm charts. Some bundles use **`OCIRepository`** for OCI-hosted charts (for example [`templates/system/flux-web/oci-repository.yaml`](templates/system/flux-web/oci-repository.yaml)).
 
+**Operator custom resources**: when a CRD is installed by a `HelmRelease` in the same Flux `Kustomization`, a plain CR fails the server-side dry-run on first apply. Wrap the CR in the shared `additional-manifests` chart and add `dependsOn` on the operator release (see [`templates/monitoring/grafana-operator/helm-release-grafana-instance.yaml`](templates/monitoring/grafana-operator/helm-release-grafana-instance.yaml) and [`templates/ai/openclaw-instance/helm-release-openclaw-instance.yaml`](templates/ai/openclaw-instance/helm-release-openclaw-instance.yaml)).
+
 ## Cluster components: composition rules
 
 - **One folder per concern** under `clusters/<name>/components/<component>/`, with a `kustomization.yaml` that:
@@ -58,6 +60,7 @@ The **order** of entries in [`clusters/_template/components/kustomization.yaml`]
 - **Secrets**: Store provider API tokens and similar data as **SOPS**-encrypted manifests under `clusters/.../components/`, referenced by `decryption` in the Flux `Kustomization`. Do not commit raw credentials.
 - **Flux**: The template enables **network policies** on the Flux installation via `FluxInstance` (`networkPolicy: true`). Keep Flux and Helm release namespaces aligned with least-privilege RBAC from upstream charts.
 - **Helm**: Pin chart versions in `HelmRelease` specs; use explicit `interval` and chart `version` fields suitable for your change cadence.
+- **Supply chain**: When upstream signs its OCI charts, enable `spec.verify` (cosign keyless with `matchOIDCIdentity`) on the `OCIRepository` (for example [`templates/ai/openclaw-operator/oci-repository-openclaw-operator.yaml`](templates/ai/openclaw-operator/oci-repository-openclaw-operator.yaml)).
 
 ## Versioning and metadata
 

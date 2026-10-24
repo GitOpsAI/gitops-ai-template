@@ -15,8 +15,8 @@ spec:
         namespace: flux-system
       version: "0.1.0"
   dependsOn:
-    - namespace: ingress-nginx-external
-      name: ingress-nginx-external
+    - namespace: envoy-gateway-system
+      name: enwoy-gateway
     - namespace: grafana
       name: grafana-operator
   interval: 5m
