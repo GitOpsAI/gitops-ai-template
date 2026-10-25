@@ -1,0 +1,18 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: openclaw-operator
+spec:
+  interval: 1h
+  url: oci://ghcr.io/paperclipinc/charts/openclaw-operator
+  layerSelector:
+    mediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
+    operation: copy
+  ref:
+    tag: "0.40.0"
+  # Keyless cosign signature produced by the upstream release workflow
+  verify:
+    provider: cosign
+    matchOIDCIdentity:
+      - issuer: "^https://token\\.actions\\.githubusercontent\\.com$"
+        subject: "^https://github\\.com/paperclipinc/openclaw-operator/\\.github/workflows/release\\.yaml@refs/tags/v.+$"

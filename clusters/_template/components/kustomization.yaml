@@ -3,7 +3,7 @@ kind: Kustomization
 resources:
   - shared-helm-repos
   - prometheus-operator-crds
-  - ingress-nginx-external
+  - enwoy-gateway
   - cert-manager
   - external-dns
   - openclaw

@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+metadata:
+  name: openclaw-operator
+namespace: openclaw-operator-system
+resources:
+  - namespace.yaml
+  - oci-repository-openclaw-operator.yaml
+  - helm-release-openclaw-operator.yaml
+  - network-policy-default-deny-ingress.yaml

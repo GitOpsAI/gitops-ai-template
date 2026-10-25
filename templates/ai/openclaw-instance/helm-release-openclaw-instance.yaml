@@ -1,0 +1,221 @@
+# OpenClawInstance managed by the OpenClaw operator (templates/ai/openclaw-operator).
+# Wrapped in a HelmRelease so it is applied only after the operator has installed its CRDs.
+# API reference: https://github.com/paperclipinc/openclaw-operator/blob/main/docs/api-reference.md
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: openclaw-instance
+  namespace: openclaw-instance
+spec:
+  releaseName: openclaw-instance
+  chart:
+    spec:
+      chart: additional-manifests
+      sourceRef:
+        kind: HelmRepository
+        name: additional-manifests
+        namespace: flux-system
+      version: "0.1.0"
+  interval: 5m
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  dependsOn:
+    - namespace: openclaw-operator-system
+      name: openclaw-operator
+    - namespace: envoy-gateway-system
+      name: enwoy-gateway
+    - namespace: flux-system
+      name: prometheus-operator-crds
+  values:
+    manifests:
+      - apiVersion: openclaw.rocks/v1alpha1
+        kind: OpenClawInstance
+        metadata:
+          name: openclaw-instance
+        spec:
+          # Operator 0.40.0 leaves the PVC root owned by root (fsGroup only sets the group).
+          # OpenClaw >= 2026.10 tolerates that and logs a warning instead of crash-looping on chmod;
+          # do not pin 2026.9.x. Images are digest-pinned (digest wins over tag); bump both together.
+          image:
+            repository: ghcr.io/openclaw/openclaw
+            tag: "2026.10.7"
+            digest: sha256:fb26f0841659dc757f23feec9adeab51f11d76779a409db5d22e191b43841afa
+            pullPolicy: IfNotPresent
+
+          # Gateway proxy sidecar: operator default nginx 1.27 is end-of-life
+          gateway:
+            image:
+              repository: docker.io/library/nginx
+              tag: "1.30-alpine"
+              digest: sha256:47928bf67eb62a1863cb08d9ecb52d3e704304ba614eaee17884204677702951
+            # The operator derives Control UI origins from Ingress hosts only, not HTTPRoute hostnames
+            controlUiOrigins:
+              - https://openclaw.${cluster_domain}
+
+          # init-uv bootstrap container
+          runtimeDeps:
+            uvImage:
+              repository: ghcr.io/astral-sh/uv
+              tag: "0.6-bookworm-slim"
+              digest: sha256:2547759a46393757d2e3d655e33b3008d806fc9f0d66fd900f3820e8bae53550
+
+          # Provider API keys (created by the bootstrapper, SOPS-encrypted)
+          envFrom:
+            - secretRef:
+                name: openclaw-envs
+          # Setting the token here stops the operator from injecting its auto-generated one
+          env:
+            - name: OPENCLAW_GATEWAY_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-envs
+                  key: OPENCLAW_GATEWAY_TOKEN
+
+          # ClawHub skills installed by the operator init container
+          skills:
+            - weather
+            - gog
+
+          config:
+            # merge preserves runtime changes made via the Control UI; overwrite for strict GitOps
+            mergeMode: merge
+            # Rebuilt from the CR on every restart so auth/bind cannot be weakened via the Control UI
+            forcePaths:
+              - gateway
+            # Operator-managed keys (gateway.mode/bind, trustedProxies, controlUi.allowedOrigins,
+            # browser profiles, diagnostics.otel) are injected automatically.
+            raw:
+              gateway:
+                auth:
+                  mode: token
+                  # Resolved by OpenClaw from the env var so the token never lands in the ConfigMap
+                  token: "$${OPENCLAW_GATEWAY_TOKEN}"
+              agents:
+                defaults:
+                  model:
+                    primary: openai/gpt-5.6-sol
+                  userTimezone: UTC
+                  timeoutSeconds: 600
+                  maxConcurrent: 1
+                entries:
+                  main:
+                    name: White Rabbit
+              session:
+                scope: per-sender
+                reset:
+                  mode: idle
+                  idleMinutes: 60
+              logging:
+                level: info
+                consoleLevel: info
+                consoleStyle: json
+              tools:
+                profile: full
+                web:
+                  search:
+                    enabled: false
+                  fetch:
+                    enabled: true
+
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 2000m
+              memory: 2Gi
+
+          storage:
+            persistence:
+              enabled: true
+              size: 5Gi
+              accessModes:
+                - ReadWriteOnce
+              # Keep agent memory/sessions when the instance is deleted
+              orphan: true
+
+          # Mark the pod NotReady instead of serving traffic when the PVC is full or read-only
+          probes:
+            diskReadiness:
+              enabled: true
+              minFree: 256Mi
+
+          chromium:
+            enabled: true
+            image:
+              repository: docker.io/chromedp/headless-shell
+              tag: "148.0.7778.97"
+              digest: sha256:313ed7255ae1e155fb157631a6d4c0eb8b65bbe06de9e704ed834399bdf678ff
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                cpu: 1000m
+                memory: 1Gi
+
+          security:
+            # Replaced by network-policy-openclaw.yaml: the operator default allows TCP/443
+            # egress to any destination, including cluster-internal and LAN addresses.
+            networkPolicy:
+              enabled: false
+
+          # HTTPS redirect, HSTS, TLS and the IP allowlist are handled by the shared Gateway
+          # (templates/system/enwoy-gateway); rate limit and timeouts by the policy below.
+          networking:
+            ingress:
+              enabled: false
+            httpRoute:
+              enabled: true
+              parentRefs:
+                - name: public
+                  namespace: envoy-gateway-system
+                  sectionName: https
+              hostnames:
+                - openclaw.${cluster_domain}
+
+          observability:
+            metrics:
+              enabled: true
+              collector:
+                image:
+                  repository: docker.io/otel/opentelemetry-collector
+                  tag: "0.120.0"
+                  digest: sha256:1daa4312b48312dbae2d543e67b77e897dd5d9c48e7651d1416cdb417026ad06
+              serviceMonitor:
+                enabled: true
+              # CrashLooping/OOMKilled/PVCNearlyFull alerts; converted to VMRule by the VictoriaMetrics operator
+              prometheusRule:
+                enabled: true
+
+      # Targets the HTTPRoute the operator names after the instance. Overrides the Gateway-wide
+      # BackendTrafficPolicy, so it carries its own timeout.
+      - apiVersion: gateway.envoyproxy.io/v1alpha1
+        kind: BackendTrafficPolicy
+        metadata:
+          name: openclaw-instance
+        spec:
+          targetRefs:
+            - group: gateway.networking.k8s.io
+              kind: HTTPRoute
+              name: openclaw-instance
+          # Control UI uses a long-lived WebSocket; idle streams are still reclaimed by
+          # Envoy's stream idle timeout.
+          timeout:
+            http:
+              requestTimeout: 0s
+          rateLimit:
+            type: Local
+            local:
+              rules:
+                - clientSelectors:
+                    - sourceCIDR:
+                        type: Distinct
+                        value: 0.0.0.0/0
+                  limit:
+                    requests: 20
+                    unit: Second
