@@ -9,6 +9,7 @@ All notable changes to this GitOps template are documented here. Versions follow
 - **Back up OpenClaw first.** Flux deletes the old release **and its PVC** `openclaw/openclaw-data` (sessions, memory, Codex OAuth tokens, workspace). Copy out `/home/node/.openclaw` before syncing, then `kubectl cp` it to `openclaw-instance/openclaw-instance-0`, container `openclaw`, path `/home/openclaw/.openclaw`.
 - **Move the OpenClaw secret:** `sops edit clusters/<name>/components/openclaw/secret-openclaw-envs.yaml` and set `metadata.namespace: openclaw-instance`.
 - **Update scripts that exec into OpenClaw:** `deployment/openclaw` (container `main`) is now `statefulset/openclaw-instance` (container `openclaw`), e.g. `kubectl exec -n openclaw-instance openclaw-instance-0 -c openclaw -- openclaw devices list`. Pair devices again.
+- **Expect a short outage on ports 80/443:** the Envoy proxy Service is renamed to `envoy-public`, so Envoy Gateway creates a new `LoadBalancer` Service and deletes the old one.
 - **HTTPS is down until the wildcard certificate is issued** (`kubectl get certificate -n envoy-gateway-system`). The old per-app TLS secrets (`flux-*-tls`, `grafana-*-tls`, `victoria-*-tls`, `openclaw-tls`) can be deleted.
 - **Custom Ingresses stop working** (`ingressClassName: nginx-external`: MinIO, Home Assistant, Headlamp, LiteLLM, n8n). Move them to an `HTTPRoute` on `envoy-gateway-system/public`, or re-add `ingress-nginx-external` to `components/kustomization.yaml`.
 
@@ -29,6 +30,24 @@ All notable changes to this GitOps template are documented here. Versions follow
 - Routes are accepted only from `flux-system`, `grafana`, `victoria-metrics` and `openclaw-instance`; add a namespace to the listener selector to expose another app.
 - Flux Web, Grafana and VictoriaMetrics use `HTTPRoute`s instead of Ingresses; Flux Web gets its own `NetworkPolicy` (Envoy proxies only). external-dns now creates records from `HTTPRoute`s.
 - Envoy Gateway **v1.8.0 → v1.9.2** from an OCI chart (CRDs now updated on upgrade), proxy `distroless-v1.39.5`, all images digest-pinned.
+- The Envoy proxy Service has a fixed name, `envoy-public`. Only one Gateway may use this `EnvoyProxy`.
+- cert-manager: set `letsencrypt_server` in `cluster-sync.yaml` to point both `ClusterIssuer`s at another ACME server (e.g. Let's Encrypt staging). The default stays production.
+
+### System: Cloudflare Tunnel (opt-in)
+
+- New package [`cloudflare-tunnel`](templates/system/cloudflare-tunnel): `cloudflared` **2026.10.3** (tag + digest), 2 replicas with a `PodDisruptionBudget`.
+- Hardened pod: Pod Security `restricted`, non-root (UID 65532), read-only root filesystem, all capabilities dropped, no service account token.
+- Own `NetworkPolicy`: egress only DNS, the `public` Gateway's Envoy proxies (port 10443) and public IPs on 7844 TCP/UDP; ingress only metrics scraping from `victoria-metrics`.
+- Off by default: the [cluster component](clusters/_template/components/cloudflare-tunnel) is not in `components/kustomization.yaml`; gitops-ai **1.4.0+** adds it when you choose Cloudflare Tunnel mode.
+- End-to-end TLS: `*.${cluster_domain}` is forwarded to `envoy-public` over HTTPS with the wildcard certificate (`matchSNItoHost`), and cloudflared rejects requests without a valid Cloudflare Access token (`access.required`).
+- Config changes restart the pods automatically (hashed ConfigMap); tunnel credentials are a SOPS secret.
+
+### Developer: Codespaces
+
+- New [`.devcontainer`](.devcontainer): Ubuntu 24.04, Docker-in-Docker and Node features pinned by digest; needs 4 CPU, 16 GB RAM, 32 GB disk. Codespaces secrets are declared and automatic port forwarding is off.
+- On create, installs k3d, flux-operator, sops, age and kubectl, each pinned by version and verified by SHA-256.
+- On start, restores the age key from the `SOPS_AGE_KEY` secret and restarts stopped k3d clusters.
+- CI: kubeconform also validates the opt-in components.
 
 ## [1.1.1] — 2026-05-10
 

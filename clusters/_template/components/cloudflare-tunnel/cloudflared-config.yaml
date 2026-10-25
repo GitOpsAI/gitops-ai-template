@@ -1,0 +1,22 @@
+# Upper-case placeholders are rendered by the bootstrap script; the cluster domain is
+# substituted by Flux (postBuild).
+tunnel: ${CLOUDFLARE_TUNNEL_ID}
+credentials-file: /etc/cloudflared/creds/credentials.json
+metrics: 0.0.0.0:2000
+no-autoupdate: true
+ingress:
+  # matchSNItoHost: Envoy selects the wildcard listener by SNI and the TLS certificate is
+  # verified for the requested host, so traffic stays encrypted and authenticated end to end.
+  - hostname: "*.${cluster_domain}"
+    service: https://envoy-public.envoy-gateway-system.svc.cluster.local:443
+    originRequest:
+      matchSNItoHost: true
+      noTLSVerify: ${CLOUDFLARE_ORIGIN_NO_TLS_VERIFY}
+      connectTimeout: 10s
+      # Rejects requests without a valid Cloudflare Access JWT for this application.
+      access:
+        required: true
+        teamName: ${CLOUDFLARE_ACCESS_TEAM}
+        audTag:
+          - ${CLOUDFLARE_ACCESS_AUD}
+  - service: http_status:404

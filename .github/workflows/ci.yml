@@ -78,6 +78,8 @@ jobs:
           envsubst '${CLUSTER_NAME} ${CLUSTER_DOMAIN} ${CLUSTER_PUBLIC_IP} ${LETSENCRYPT_EMAIL} ${INGRESS_NGINX_ALLOWED_IPS}' \
             < "clusters/${CLUSTER_NAME}/cluster-sync.yaml" > "clusters/${CLUSTER_NAME}/cluster-sync.yaml.tmp"
           mv "clusters/${CLUSTER_NAME}/cluster-sync.yaml.tmp" "clusters/${CLUSTER_NAME}/cluster-sync.yaml"
+          # Opt-in components are not listed by default; enable them so they are validated too.
+          printf '  - cloudflare-tunnel\n' >> "clusters/${CLUSTER_NAME}/components/kustomization.yaml"
 
       - name: Write flux-system Kustomization stub
         run: |

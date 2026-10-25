@@ -46,6 +46,8 @@ spec:
     manifests:
       # externalTrafficPolicy: Local preserves the client source IP for the IP allowlist
       # and per-client rate limits.
+      # Fixed service name (cloudflare-tunnel targets envoy-public): only one Gateway may
+      # use this EnvoyProxy, a second one would collide on the Service name.
       - apiVersion: gateway.envoyproxy.io/v1alpha1
         kind: EnvoyProxy
         metadata:
@@ -56,6 +58,7 @@ spec:
             type: Kubernetes
             kubernetes:
               envoyService:
+                name: envoy-public
                 type: LoadBalancer
                 externalTrafficPolicy: Local
 

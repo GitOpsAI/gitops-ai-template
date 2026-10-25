@@ -29,7 +29,7 @@ So: **GitRepository → (bootstrap applies) `clusters/<name>` → Flux `Kustomiz
 - **Decryption**: SOPS with `secretRef.name: sops-age`
 - **Post-build substitution** (`postBuild.substitute`): replaces tokens in rendered YAML before apply. Keys are fixed and must match what you use in manifests (for example `${cluster_domain}` in Helm values).
 
-Substituted keys in this template include: `cluster_name`, `cluster_domain`, `cluster_public_ip`, `letsencrypt_email`, `ingress_nginx_allowed_ips`. **Render** this file with `envsubst` (or your bootstrap tooling) so `${CLUSTER_NAME}` and related placeholders in the **Flux `Kustomization` spec** itself are resolved; Helm values and other YAML often use the **`postBuild`** keys (for example `${cluster_domain}`) without a shell `envsubst` step.
+Substituted keys in this template include: `cluster_name`, `cluster_domain`, `cluster_public_ip`, `letsencrypt_email`, `ingress_nginx_allowed_ips`, and the optional `letsencrypt_server` (defaults to the Let's Encrypt production directory; the bootstrapper sets the staging URL on request). **Render** this file with `envsubst` (or your bootstrap tooling) so `${CLUSTER_NAME}` and related placeholders in the **Flux `Kustomization` spec** itself are resolved; Helm values and other YAML often use the **`postBuild`** keys (for example `${cluster_domain}`) without a shell `envsubst` step.
 
 ## Templates: how to structure a package
 
@@ -55,6 +55,8 @@ Reference [`kustomizeconfig.yaml`](kustomizeconfig.yaml) from template kustomiza
 
 The **order** of entries in [`clusters/_template/components/kustomization.yaml`](clusters/_template/components/kustomization.yaml) matters: shared Helm repos and CRDs are listed before components that depend on them (for example Prometheus Operator CRDs before stacks that assume those CRDs exist).
 
+**Opt-in components** ship a folder under `clusters/_template/components/` but are **not** listed in that `kustomization.yaml`, so bootstrappers that do not know them never apply unrendered placeholders. The bootstrapper inserts them when selected; CI appends them before validation. Currently: [`cloudflare-tunnel`](clusters/_template/components/cloudflare-tunnel/).
+
 ## Security conventions
 
 - **Secrets**: Store provider API tokens and similar data as **SOPS**-encrypted manifests under `clusters/.../components/`, referenced by `decryption` in the Flux `Kustomization`. Do not commit raw credentials.
@@ -66,9 +68,47 @@ The **order** of entries in [`clusters/_template/components/kustomization.yaml`]
 
 - [`template-sync-metadata.yaml`](template-sync-metadata.yaml) holds the template **semver** and upstream pointer; bump it when you cut releases, in line with [`CHANGELOG.md`](CHANGELOG.md) and git tags.
 
+## Running in GitHub Codespaces
+
+The [`.devcontainer`](.devcontainer/devcontainer.json) runs the whole stack on a free GitHub Codespace (k3d in Docker-in-Docker) and publishes it on your own domain through the [`cloudflare-tunnel`](templates/system/cloudflare-tunnel/) component: no public IP or inbound port, and every app is behind Cloudflare Access.
+
+```mermaid
+flowchart LR
+    User --> Access["Cloudflare Access"]
+    Access --> Edge["Cloudflare edge, proxied *.domain CNAME"]
+    Edge -->|"outbound tunnel :7844"| Cloudflared["cloudflared x2"]
+    subgraph codespace [Codespace, k3d cluster]
+        Cloudflared -->|"HTTPS, SNI = Host, Access JWT checked"| Envoy["Envoy Gateway public"]
+        Envoy --> Apps["Grafana / Flux Web / OpenClaw"]
+    end
+```
+
+**Limits of the free tier** (personal accounts): 120 core-hours per month, so about 30 hours on the required 4-core / 16 GB machine. A codespace stops after at most 240 minutes without user activity (a running cluster does not count), and the site is down while it is stopped. Docker data survives stop/start and `post-start.sh` restarts the cluster; deleting the codespace deletes the cluster, but Git plus the age key let you bootstrap it again. Use it for development and demos, not as permanent hosting.
+
+**One-time setup**
+
+1. Create your repo from this template, and keep the domain on Cloudflare (use the zone apex as cluster domain; Universal SSL covers one subdomain level only).
+2. Enable [Cloudflare Zero Trust](https://one.dash.cloudflare.com) (Free plan) and create two API tokens:
+   - **runtime** (stored SOPS-encrypted for cert-manager): `Zone > DNS > Edit`, `Zone > Zone > Read`;
+   - **setup** (used once, never stored, revoke afterwards): `Account > Cloudflare Tunnel > Edit`, `Account > Access: Apps and Policies > Edit`, `Account > Access: Organizations, Identity Providers, and Groups > Read`, `Zone > DNS > Edit`.
+3. Add [Codespaces secrets](https://github.com/settings/codespaces) scoped to your repo: `GITOPS_GIT_TOKEN` (fine-grained PAT, this repo only, Contents read/write), optionally `GITOPS_FLUX_GIT_TOKEN` (Contents read-only, used by Flux instead), `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_SETUP_TOKEN`.
+4. In the same settings page, set the idle timeout to 240 minutes.
+
+**Bootstrap**
+
+1. Open a 4-core codespace on your repo and run `npx gitops-ai bootstrap`. It detects Codespaces, uses k3d, takes the repo from the codespace and defaults to the **Cloudflare Tunnel** network mode.
+2. Save the age key outside the codespace: `gh secret set SOPS_AGE_KEY --user --repos <owner>/<repo> < ~/.sops/age.agekey`. `post-start.sh` restores it on every start.
+3. Open `https://grafana.<domain>` and sign in with an allowed email.
+
+**Security notes**
+
+- Nothing is forwarded through `*.app.github.dev` (`onAutoForward: ignore`); public traffic only enters through the tunnel.
+- The Gateway allowlist is the pod CIDR `10.42.0.0/16`, and the `cloudflared` NetworkPolicy allows egress only to kube-dns, the Envoy proxies (container port 10443) and public IPs on 7844.
+- GitHub's terms allow Codespaces for development; do not use Actions runners to host a long-running service.
+
 ## CI expectations
 
-Pipelines (for example [`.gitlab-ci.yml`](.gitlab-ci.yml) and [`.github/workflows/ci.yml`](.github/workflows/ci.yml)) **copy** `clusters/_template` to a temporary cluster name, **`envsubst`** `cluster-sync.yaml`, then run **`flux build kustomization`** and **`kubeconform`** against the built manifests. Changes that break Kustomize layout or Flux API shapes should fail CI.
+Pipelines (for example [`.gitlab-ci.yml`](.gitlab-ci.yml) and [`.github/workflows/ci.yml`](.github/workflows/ci.yml)) **copy** `clusters/_template` to a temporary cluster name, **`envsubst`** `cluster-sync.yaml`, enable the opt-in components, then run **`flux build kustomization`** and **`kubeconform`** against the built manifests. Changes that break Kustomize layout or Flux API shapes should fail CI.
 
 ## Adding a new workload (checklist)
 
