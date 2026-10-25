@@ -1,0 +1,11 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../../../templates/system/cloudflare-tunnel
+  - secret-cloudflare-tunnel.yaml
+# Hashed name: cloudflared only reads its config at start, so a change must roll the pods.
+configMapGenerator:
+  - name: cloudflared-config
+    namespace: cloudflare-tunnel
+    files:
+      - config.yaml=cloudflared-config.yaml

@@ -33,6 +33,9 @@ variables:
         < "clusters/${CLUSTER_NAME}/cluster-sync.yaml" > "clusters/${CLUSTER_NAME}/cluster-sync.yaml.tmp"
       mv "clusters/${CLUSTER_NAME}/cluster-sync.yaml.tmp" "clusters/${CLUSTER_NAME}/cluster-sync.yaml"
 
+      # Opt-in components are not listed by default; enable them so they are validated too.
+      printf '  - cloudflare-tunnel\n' >> "clusters/${CLUSTER_NAME}/components/kustomization.yaml"
+
       cat > /tmp/flux-system-ks.yaml <<EOF
       apiVersion: kustomize.toolkit.fluxcd.io/v1
       kind: Kustomization

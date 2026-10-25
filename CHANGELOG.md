@@ -41,12 +41,22 @@ All notable changes to this GitOps template are documented here. Versions follow
   - `install.crds` / `upgrade.crds: CreateReplace`: the Gateway API and Envoy Gateway CRDs live in the chart's `crds/` directory, which Helm skips on upgrade, so Flux now updates them too.
   - Fixed yamllint errors (sequence indentation, missing newline at end of file).
 
+### Codespaces and Cloudflare Tunnel
+
+- **New package** [`templates/system/cloudflare-tunnel`](templates/system/cloudflare-tunnel): `cloudflared` **2026.10.3** (tag + digest), 2 replicas with a `PodDisruptionBudget`, namespace with Pod Security `restricted`, non-root (65532), read-only root filesystem, all capabilities dropped, no service account token. `NetworkPolicy`: egress only to kube-dns, the `public` Gateway's Envoy proxies (container port 10443) and public IPs on 7844 TCP/UDP; ingress only from `victoria-metrics` on the metrics port.
+- **Opt-in cluster component** [`clusters/_template/components/cloudflare-tunnel`](clusters/_template/components/cloudflare-tunnel): not listed in `components/kustomization.yaml`; gitops-ai **1.4.0+** inserts it in Cloudflare Tunnel mode. Locally-managed tunnel: ingress `*.${cluster_domain}` → `https://envoy-public.envoy-gateway-system.svc.cluster.local:443` with `matchSNItoHost` (end-to-end TLS with the wildcard certificate) and `access.required` (cloudflared validates the Cloudflare Access JWT). Config is a hashed `configMapGenerator`, so changes roll the pods; credentials are a SOPS secret.
+- **Envoy Gateway**: the `EnvoyProxy` sets `envoyService.name: envoy-public`, giving the proxy Service a stable name. Only one Gateway may use this `EnvoyProxy`.
+- **cert-manager**: the ACME server of both `ClusterIssuer`s is `${letsencrypt_server:=https://acme-v02.api.letsencrypt.org/directory}`; set `letsencrypt_server` in `cluster-sync.yaml` to use the staging CA. Existing clusters keep production without changes.
+- **Devcontainer** [`.devcontainer`](.devcontainer): Ubuntu 24.04 base image and Docker-in-Docker / Node features pinned by digest, `hostRequirements` 4 CPU / 16 GB / 32 GB, Codespaces secrets declared, auto port-forwarding disabled. `post-create.sh` installs k3d, flux-operator, sops, age and kubectl pinned by version and SHA-256; `post-start.sh` restores the age key from `SOPS_AGE_KEY` and restarts stopped k3d clusters.
+- **CI**: the kubeconform job appends the opt-in components before rendering, so they are validated too.
+
 ### Migration
 
 - The old Helm release is uninstalled when Flux prunes it, and its PVC `openclaw/openclaw-data` is **deleted with it**. To keep agent state (sessions, memory, Codex OAuth tokens, workspace), back up `/home/node/.openclaw` before syncing this version. Then restore it into the new pod: `kubectl cp` into `openclaw-instance/openclaw-instance-0`, container `openclaw`, path `/home/openclaw/.openclaw`.
 - Namespace changed `openclaw` → `openclaw-instance`. In existing cluster repos, update `metadata.namespace` of the SOPS-encrypted `clusters/<name>/components/openclaw/secret-openclaw-envs.yaml` (`sops edit`); Flux prunes the old `openclaw` namespace.
 - Workload names changed: `openclaw/deployment/openclaw` (container `main`) → `openclaw-instance/statefulset/openclaw-instance` (container `openclaw`). Update any scripts that exec into the pod, for example `kubectl exec -n openclaw-instance openclaw-instance-0 -c openclaw -- openclaw devices list`.
 - Devices must be paired again after migration.
+- The Envoy proxy Service is renamed to `envoy-public`. Envoy Gateway creates the new `LoadBalancer` Service and deletes the old one, so expect a short interruption while the load balancer re-binds ports 80/443.
 - Ingresses are removed and Flux prunes `ingress-nginx-external`. Until the wildcard certificate is issued (check `kubectl get certificate -n envoy-gateway-system`), HTTPS serves no certificate. The old per-app TLS Secrets (`flux-*-tls`, `grafana-*-tls`, `victoria-*-tls`, `openclaw-tls`) are no longer used and can be deleted.
 - Custom manifests that still use `ingressClassName: nginx-external` (MinIO, Home Assistant, Headlamp, LiteLLM, n8n templates) have no controller after the upgrade; move them to an `HTTPRoute` on `envoy-gateway-system/public` or re-add `ingress-nginx-external` to `components/kustomization.yaml`.
 
